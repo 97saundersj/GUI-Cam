@@ -34,7 +34,6 @@ jobs:
         working-directory: web
         env:
           VITE_BASE_PATH: /GUI-Cam/
-          VITE_STREAM_URL: ${{ vars.VITE_STREAM_URL }}
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
