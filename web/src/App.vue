@@ -1,8 +1,10 @@
 <script setup>
 import LiveStream from './components/LiveStream.vue'
 
-const streamUrl =
+const defaultStreamUrl =
   'https://gui-cam-converter.happysea-d9d1b28f.australiaeast.azurecontainerapps.io/cam/index.m3u8'
+
+const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl
 </script>
 
 <template>

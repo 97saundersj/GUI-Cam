@@ -1,0 +1,22 @@
+@host = http://localhost:5245
+
+### ONVIF details
+POST {{host}}/api/onvif
+Content-Type: application/json
+
+{
+  "onvifUri": "http://192.168.0.79:2020/onvif/service",
+  "userName": "username",
+  "password": "password"
+}
+
+### PTZ
+POST {{host}}/api/onvif/ptz
+Content-Type: application/json
+
+{
+  "command": "down",
+  "onvifUri": "http://192.168.0.79:2020/onvif/service",
+  "userName": "username",
+  "password": "password"
+}

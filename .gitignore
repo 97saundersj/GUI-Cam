@@ -1,1 +1,33 @@
+# Secrets & local config
 .env
+.env.*
+!.env.example
+appsettings.Development.json
+local.settings.json
+secrets/
+
+# .NET
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+artifacts/
+
+# Node / frontend (web/)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+
+# Legacy Azure Functions build output (folder may remain locally)
+functions/

@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
+import PtzControls from './PtzControls.vue'
 
 const props = defineProps({
   src: {
@@ -14,9 +15,31 @@ const status = ref('connecting')
 const errorMessage = ref('')
 const isAtLiveEdge = ref(true)
 
-const LIVE_EDGE_THRESHOLD_SEC = 8
+const lowLatency = import.meta.env.VITE_HLS_LOW_LATENCY !== 'false'
+const LIVE_EDGE_THRESHOLD_SEC = lowLatency ? 3 : 8
 
 let hls = null
+
+function createHlsConfig() {
+  if (lowLatency) {
+    return {
+      enableWorker: true,
+      lowLatencyMode: true,
+      backBufferLength: 30,
+      liveSyncMode: 'live',
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 6,
+      maxLiveSyncPlaybackRate: 1.2,
+    }
+  }
+
+  return {
+    enableWorker: true,
+    lowLatencyMode: false,
+    backBufferLength: Infinity,
+    liveSyncMode: 'buffered',
+  }
+}
 
 function destroyPlayer() {
   if (hls) {
@@ -39,14 +62,7 @@ function setupPlayer() {
     return
   }
 
-  // Standard (non-low-latency) HLS keeps the playlist sliding window buffered
-  // so the native controls show a seek bar for going back in time.
-  hls = new Hls({
-    enableWorker: true,
-    lowLatencyMode: false,
-    backBufferLength: Infinity,
-    liveSyncMode: 'buffered',
-  })
+  hls = new Hls(createHlsConfig())
 
   hls.loadSource(props.src)
   hls.attachMedia(video)
@@ -170,6 +186,8 @@ onBeforeUnmount(destroyPlayer)
         <span class="live-dot" />
         Live
       </div>
+
+      <PtzControls v-if="status === 'live'" />
     </div>
   </div>
 </template>
