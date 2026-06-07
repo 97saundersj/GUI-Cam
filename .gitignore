@@ -31,3 +31,18 @@ Thumbs.db
 
 # Legacy Azure Functions build output (folder may remain locally)
 functions/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.tfvars
+terraform/*.auto.tfvars
+terraform/.deploy/
