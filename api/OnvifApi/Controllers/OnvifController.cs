@@ -25,21 +25,22 @@ public sealed class OnvifController(
             "Failed to retrieve ONVIF details",
             "Unable to reach the camera or complete ONVIF negotiation.");
 
-    /// <summary>Pan/tilt: command is up, down, left, right, or stop.</summary>
+    /// <summary>Pan/tilt: action is nudge (default), move, or stop.</summary>
     [HttpPost("ptz")]
     [ProducesResponseType(typeof(PtzResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public Task<IActionResult> SendPtz([FromBody] PtzRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Command))
+        var action = (request.Action ?? "nudge").Trim().ToLowerInvariant();
+        if (action is "nudge" && string.IsNullOrWhiteSpace(request.Command))
         {
-            return Task.FromResult<IActionResult>(BadRequest(new { error = "command is required." }));
+            return Task.FromResult<IActionResult>(BadRequest(new { error = "command is required for nudge action." }));
         }
 
         return RunAsync(
             request,
-            (connection, ct) => onvif.SendPtzAsync(connection, request.Command, ct),
+            (connection, ct) => onvif.SendPtzAsync(connection, request, ct),
             cancellationToken,
             "PTZ command failed",
             "PTZ command failed.",

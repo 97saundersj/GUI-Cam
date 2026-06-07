@@ -36,6 +36,7 @@ const seekableEnd = ref(0)
 const currentTime = ref(0)
 const scrubbing = ref(false)
 const ptzOpen = ref(false)
+const ptzMoving = ref(false)
 
 let hideTimer = null
 
@@ -51,7 +52,7 @@ const timelineProgress = computed(() => {
 
 function scheduleHide() {
   clearTimeout(hideTimer)
-  if (!isPlaying.value || scrubbing.value || ptzOpen.value || props.isBuffering) {
+  if (!isPlaying.value || scrubbing.value || ptzOpen.value || ptzMoving.value || props.isBuffering) {
     visible.value = true
     return
   }
@@ -177,6 +178,7 @@ watch(
 
 watch(isPlaying, scheduleHide)
 watch(ptzOpen, scheduleHide)
+watch(ptzMoving, scheduleHide)
 watch(() => props.isBuffering, scheduleHide)
 
 onMounted(() => {
@@ -248,6 +250,7 @@ defineExpose({ revealControls })
         class="controls-ptz"
         :zoom="zoom"
         @open-change="ptzOpen = $event"
+        @moving-change="ptzMoving = $event"
         @zoom-in="emit('zoom-in')"
         @zoom-out="emit('zoom-out')"
         @zoom-reset="emit('zoom-reset')"

@@ -9,6 +9,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddControllers();
+builder.Services.AddSingleton<OnvifClientCache>();
 builder.Services.AddSingleton<OnvifCameraService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>

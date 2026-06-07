@@ -25,7 +25,20 @@ const SEEK_TO_LIVE_EPSILON_SEC = 0.05
 let hls = null
 let initialLiveSyncDone = false
 
-const { zoom, videoStyle, zoomIn, zoomOut, resetZoom } = useDigitalZoom()
+const {
+  zoom,
+  isZoomed,
+  videoStyle,
+  panBy,
+  zoomIn,
+  zoomOut,
+  resetZoom,
+  zoomAtWheel,
+} = useDigitalZoom()
+
+let panDragActive = false
+let panDragStartX = 0
+let panDragStartY = 0
 
 function createHlsConfig() {
   if (lowLatency) {
@@ -196,6 +209,8 @@ function onStreamClick() {
   const video = videoRef.value
   if (!video) return
 
+  if (panDragActive) return
+
   if (status.value === 'paused') {
     video.play().catch(() => {})
     return
@@ -204,6 +219,50 @@ function onStreamClick() {
   if (status.value === 'live') {
     revealControls()
   }
+}
+
+function onStreamPointerDown(event) {
+  if (status.value !== 'live' || !isZoomed.value) return
+  if (event.button !== 0) return
+
+  panDragActive = true
+  panDragStartX = event.clientX
+  panDragStartY = event.clientY
+  streamFrameRef.value?.setPointerCapture(event.pointerId)
+  event.preventDefault()
+}
+
+function onStreamPointerUp(event) {
+  if (!panDragActive) return
+  panDragActive = false
+  streamFrameRef.value?.releasePointerCapture(event.pointerId)
+}
+
+function onStreamWheel(event) {
+  if (status.value !== 'live') return
+  event.preventDefault()
+  zoomAtWheel(event.deltaY)
+  revealControls()
+}
+
+function onStreamPointerMove(event) {
+  onStreamPointerMoveDrag(event)
+  revealControls()
+}
+
+function onStreamPointerMoveDrag(event) {
+  if (!panDragActive || !isZoomed.value) return
+
+  const frame = streamFrameRef.value
+  if (!frame) return
+
+  const rect = frame.getBoundingClientRect()
+  const dx = ((event.clientX - panDragStartX) / rect.width) * 100
+  const dy = ((event.clientY - panDragStartY) / rect.height) * 100
+
+  panBy(dx, dy)
+  panDragStartX = event.clientX
+  panDragStartY = event.clientY
 }
 
 onMounted(setupPlayer)
@@ -221,7 +280,12 @@ onBeforeUnmount(destroyPlayer)
     <div
       ref="streamFrameRef"
       class="stream-frame"
-      @pointermove="revealControls"
+      :class="{ 'stream-frame--panning': panDragActive, 'stream-frame--zoomed': isZoomed }"
+      @pointermove="onStreamPointerMove"
+      @pointerdown="onStreamPointerDown"
+      @pointerup="onStreamPointerUp"
+      @pointercancel="onStreamPointerUp"
+      @wheel="onStreamWheel"
       @click="onStreamClick"
     >
       <div class="stream-video-wrap">
@@ -284,6 +348,14 @@ onBeforeUnmount(destroyPlayer)
   box-shadow:
     0 24px 48px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.stream-frame--zoomed {
+  cursor: grab;
+}
+
+.stream-frame--panning {
+  cursor: grabbing;
 }
 
 .stream-video-wrap {
