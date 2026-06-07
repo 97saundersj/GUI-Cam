@@ -6,12 +6,12 @@ A live webcam site for **GUI**, a crested gecko. Watch the stream in your browse
 
 ## Project structure
 
-| Path | Description |
-| --- | --- |
-| `web/` | Vue 3 frontend (Vite + hls.js) |
-| `api/OnvifApi/` | C# Web API — ONVIF device info and stream URIs |
-| `Dockerfile` | MediaMTX container — converts an RTSP camera feed to HLS |
-| `docker-compose.yml` | Runs the stream converter locally |
+| Path                 | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `web/`               | Vue 3 frontend (Vite + hls.js)                           |
+| `api/OnvifApi/`      | C# Web API — ONVIF device info and stream URIs           |
+| `Dockerfile`         | MediaMTX container — converts an RTSP camera feed to HLS |
+| `docker-compose.yml` | Runs the stream converter locally                        |
 
 ## Local development
 
@@ -31,20 +31,20 @@ For the live GitHub Pages site, set `VITE_ONVIF_API_URL` (repository variable) a
 
 **Stream converter** (repo root `.env`, copy from `.env.example`):
 
-| Variable | Description |
-| --- | --- |
-| `MTX_HLSADDRESS` | HLS listen address (default `:8888`) |
-| `MTX_PATHS_CAM_SOURCE` | RTSP URL for the camera |
-| `MTX_HLSVARIANT` | `lowLatency` for LL-HLS (recommended) |
-| `MTX_HLSSEGMENTDURATION` | Segment length, e.g. `1s` or `500ms` |
-| `MTX_HLSPARTDURATION` | LL-HLS part length, e.g. `200ms` |
-| `MTX_HLSALWAYSREMUX` | `yes` avoids delay on first viewer |
+| Variable                 | Description                           |
+| ------------------------ | ------------------------------------- |
+| `MTX_HLSADDRESS`         | HLS listen address (default `:8888`)  |
+| `MTX_PATHS_CAM_SOURCE`   | RTSP URL for the camera               |
+| `MTX_HLSVARIANT`         | `lowLatency` for LL-HLS (recommended) |
+| `MTX_HLSSEGMENTDURATION` | Segment length, e.g. `1s` or `500ms`  |
+| `MTX_HLSPARTDURATION`    | LL-HLS part length, e.g. `200ms`      |
+| `MTX_HLSALWAYSREMUX`     | `yes` avoids delay on first viewer    |
 
 **Web player** (`web/.env`):
 
-| Variable | Description |
-| --- | --- |
-| `VITE_STREAM_URL` | HLS URL (optional; defaults to Azure converter) |
+| Variable               | Description                                                             |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `VITE_STREAM_URL`      | HLS URL (optional; defaults to Azure converter)                         |
 | `VITE_HLS_LOW_LATENCY` | `true` (default) — hls.js LL-HLS mode; `false` for longer rewind buffer |
 
 ### Reducing latency
@@ -52,7 +52,7 @@ For the live GitHub Pages site, set `VITE_ONVIF_API_URL` (repository variable) a
 Latency stacks across the pipeline. Tune each layer:
 
 1. **MediaMTX** — use the `MTX_HLS*` vars above in repo root `.env` and on **Azure Container Apps** (same env names), then redeploy the converter container.
-2. **Camera** — use substream `stream2` in `MTX_PATHS_CAM_SOURCE` for faster encode; shorten keyframe/GOP interval in the Tapo app if available.
+2. **Camera** — use substream `stream1` in `MTX_PATHS_CAM_SOURCE` for faster encode; shorten keyframe/GOP interval in the Tapo app if available.
 3. **Browser** — `VITE_HLS_LOW_LATENCY=true` in `web/.env` (enabled by default in code). Set `false` only if you prefer more rewind buffer over lower delay.
 4. **Expectation** — LL-HLS is typically ~2–6 s behind live, not instant. WebRTC would be lower latency but is not wired up here.
 
@@ -84,13 +84,13 @@ Swagger (Development): http://localhost:5245/swagger
 
 Both endpoints use the same JSON body for the camera connection:
 
-| Field | Description |
-| --- | --- |
-| `onvifUri` | Device service URL (Tapo: `http://&lt;ip&gt;:2020/onvif/service`) |
-| `host` | Alternative to `onvifUri` |
-| `port` | Default `80` when using `host` |
-| `userName`, `password` | Camera account (required) |
-| `https` | `true` for HTTPS |
+| Field                  | Description                                                       |
+| ---------------------- | ----------------------------------------------------------------- |
+| `onvifUri`             | Device service URL (Tapo: `http://&lt;ip&gt;:2020/onvif/service`) |
+| `host`                 | Alternative to `onvifUri`                                         |
+| `port`                 | Default `80` when using `host`                                    |
+| `userName`, `password` | Camera account (required)                                         |
+| `https`                | `true` for HTTPS                                                  |
 
 **Details** — `POST /api/onvif` — returns device info, services, profiles, stream URIs.
 

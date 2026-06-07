@@ -5,7 +5,7 @@ location            = "ukwest"
 resource_group_name = "rg-gui-cam"
 
 # RTSP URL for your camera (same as MTX_PATHS_CAM_SOURCE in repo root .env)
-mtx_paths_cam_source = "rtsp://username:password@host:port/stream2"
+mtx_paths_cam_source = "rtsp://username:password@host:port/stream1"
 
 # Optional overrides (defaults match .env.example)
 # mtx_hls_variant            = "lowLatency"

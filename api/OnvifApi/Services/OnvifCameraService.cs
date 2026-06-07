@@ -110,7 +110,7 @@ public sealed class OnvifCameraService
             ? request.OnvifUri.Trim()
             : BuildDeviceServiceUri(request);
 
-        return new SimpleOnvifClient(uri, request.UserName ?? string.Empty, request.Password ?? string.Empty);
+        return new NatAwareOnvifClient(uri, request.UserName ?? string.Empty, request.Password ?? string.Empty);
     }
 
     private static string BuildDeviceServiceUri(OnvifCameraRequest request)
