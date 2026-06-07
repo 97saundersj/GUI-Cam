@@ -1,8 +1,8 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
-import PtzControls from './PtzControls.vue'
-
+import StreamControls from './StreamControls.vue'
+import { useDigitalZoom } from '../composables/useDigitalZoom'
 const props = defineProps({
   src: {
     type: String,
@@ -11,14 +11,21 @@ const props = defineProps({
 })
 
 const videoRef = ref(null)
+const streamFrameRef = ref(null)
+const streamControlsRef = ref(null)
 const status = ref('connecting')
 const errorMessage = ref('')
 const isAtLiveEdge = ref(true)
+const isBuffering = ref(false)
 
 const lowLatency = import.meta.env.VITE_HLS_LOW_LATENCY !== 'false'
 const LIVE_EDGE_THRESHOLD_SEC = lowLatency ? 3 : 8
+const SEEK_TO_LIVE_EPSILON_SEC = 0.05
 
 let hls = null
+let initialLiveSyncDone = false
+
+const { zoom, videoStyle, zoomIn, zoomOut, resetZoom } = useDigitalZoom()
 
 function createHlsConfig() {
   if (lowLatency) {
@@ -55,6 +62,9 @@ function setupPlayer() {
   destroyPlayer()
   status.value = 'connecting'
   errorMessage.value = ''
+  isBuffering.value = false
+  initialLiveSyncDone = false
+  resetZoom()
 
   if (!Hls.isSupported()) {
     status.value = 'error'
@@ -69,10 +79,13 @@ function setupPlayer() {
 
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
     status.value = 'live'
+    tryInitialGoLive()
     video.play().catch(() => {
       status.value = 'paused'
     })
   })
+
+  hls.on(Hls.Events.FRAG_BUFFERED, tryInitialGoLive)
 
   hls.on(Hls.Events.ERROR, (_event, data) => {
     if (data.fatal) {
@@ -86,24 +99,60 @@ function setupPlayer() {
   })
 }
 
+function getSeekableEnd() {
+  const video = videoRef.value
+  if (!video || video.seekable.length === 0) return null
+  return video.seekable.end(video.seekable.length - 1)
+}
+
+function secondsBehindLiveEdge() {
+  const video = videoRef.value
+  const seekableEnd = getSeekableEnd()
+  if (!video || seekableEnd == null) return null
+  return seekableEnd - video.currentTime
+}
+
 function updateLiveEdgeState() {
   if (!hls) return
-  isAtLiveEdge.value = hls.latency <= LIVE_EDGE_THRESHOLD_SEC
+
+  const behindLive = secondsBehindLiveEdge()
+  if (behindLive != null) {
+    isAtLiveEdge.value = behindLive <= LIVE_EDGE_THRESHOLD_SEC
+    return
+  }
+
+  const targetLatency = hls.targetLatency
+  const threshold =
+    targetLatency != null ? targetLatency + 0.5 : LIVE_EDGE_THRESHOLD_SEC
+  isAtLiveEdge.value = hls.latency <= threshold
 }
 
 function goLive() {
   const video = videoRef.value
   if (!video || !hls) return
 
-  const liveEdge = hls.liveSyncPosition
-  if (liveEdge != null && Number.isFinite(liveEdge)) {
-    video.currentTime = liveEdge
-  } else if (video.seekable.length > 0) {
-    video.currentTime = video.seekable.end(video.seekable.length - 1)
+  const seekableEnd = getSeekableEnd()
+  if (seekableEnd != null) {
+    const rangeStart = video.seekable.start(video.seekable.length - 1)
+    video.currentTime = Math.max(rangeStart, seekableEnd - SEEK_TO_LIVE_EPSILON_SEC)
+  } else if (hls.liveSyncPosition != null && Number.isFinite(hls.liveSyncPosition)) {
+    video.currentTime = hls.liveSyncPosition
   }
 
   video.play().catch(() => {})
-  isAtLiveEdge.value = true
+  updateLiveEdgeState()
+}
+
+function tryInitialGoLive() {
+  if (initialLiveSyncDone || !hls) return
+
+  const seekableEnd = getSeekableEnd()
+  const liveSyncReady =
+    hls.liveSyncPosition != null && Number.isFinite(hls.liveSyncPosition)
+  if (seekableEnd == null && !liveSyncReady) return
+
+  initialLiveSyncDone = true
+  goLive()
 }
 
 function onVideoTimeUpdate() {
@@ -116,12 +165,17 @@ function onVideoSeeked() {
 
 function onVideoPlaying() {
   status.value = 'live'
+  isBuffering.value = false
   updateLiveEdgeState()
 }
 
+function onVideoCanPlay() {
+  isBuffering.value = false
+}
+
 function onVideoWaiting() {
-  if (status.value !== 'error') {
-    status.value = 'buffering'
+  if (status.value === 'live') {
+    isBuffering.value = true
   }
 }
 
@@ -132,6 +186,24 @@ function onVideoError() {
 
 function retry() {
   setupPlayer()
+}
+
+function revealControls() {
+  streamControlsRef.value?.revealControls()
+}
+
+function onStreamClick() {
+  const video = videoRef.value
+  if (!video) return
+
+  if (status.value === 'paused') {
+    video.play().catch(() => {})
+    return
+  }
+
+  if (status.value === 'live') {
+    revealControls()
+  }
 }
 
 onMounted(setupPlayer)
@@ -146,24 +218,31 @@ onBeforeUnmount(destroyPlayer)
 
 <template>
   <div class="stream">
-    <div class="stream-frame">
-      <video
-        ref="videoRef"
-        class="stream-video"
-        playsinline
-        muted
-        autoplay
-        controls
-        @playing="onVideoPlaying"
-        @waiting="onVideoWaiting"
-        @timeupdate="onVideoTimeUpdate"
-        @seeked="onVideoSeeked"
-        @error="onVideoError"
-      />
+    <div
+      ref="streamFrameRef"
+      class="stream-frame"
+      @pointermove="revealControls"
+      @click="onStreamClick"
+    >
+      <div class="stream-video-wrap">
+        <video
+          ref="videoRef"
+          class="stream-video"
+          :style="videoStyle"
+          playsinline
+          muted
+          autoplay
+          @playing="onVideoPlaying"
+          @canplay="onVideoCanPlay"
+          @waiting="onVideoWaiting"
+          @timeupdate="onVideoTimeUpdate"
+          @seeked="onVideoSeeked"
+          @error="onVideoError"
+        />
+      </div>
 
       <div v-if="status !== 'live'" class="stream-overlay">
         <span v-if="status === 'connecting'" class="status">Connecting…</span>
-        <span v-else-if="status === 'buffering'" class="status">Buffering…</span>
         <template v-else-if="status === 'error'">
           <span class="status error">{{ errorMessage }}</span>
           <button type="button" class="retry" @click="retry">Try again</button>
@@ -173,21 +252,19 @@ onBeforeUnmount(destroyPlayer)
         </span>
       </div>
 
-      <button
-        v-if="status === 'live' && !isAtLiveEdge"
-        type="button"
-        class="go-live"
-        @click="goLive"
-      >
-        Go live
-      </button>
-
-      <div v-else-if="status === 'live'" class="live-badge" aria-label="Live">
-        <span class="live-dot" />
-        Live
-      </div>
-
-      <PtzControls v-if="status === 'live'" />
+      <StreamControls
+        v-if="status === 'live'"
+        ref="streamControlsRef"
+        :video-el="videoRef"
+        :frame-el="streamFrameRef"
+        :is-at-live-edge="isAtLiveEdge"
+        :is-buffering="isBuffering"
+        :zoom="zoom"
+        @go-live="goLive"
+        @zoom-in="zoomIn"
+        @zoom-out="zoomOut"
+        @zoom-reset="resetZoom"
+      />
     </div>
   </div>
 </template>
@@ -209,12 +286,22 @@ onBeforeUnmount(destroyPlayer)
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
+.stream-video-wrap {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .stream-video {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
   background: #0a0d0b;
+  transition: transform 0.15s ease;
 }
 
 .stream-overlay {
@@ -251,66 +338,5 @@ onBeforeUnmount(destroyPlayer)
 
 .retry:hover {
   background: rgba(74, 124, 89, 0.45);
-}
-
-.go-live {
-  position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
-  padding: 0.35rem 0.75rem;
-  border: none;
-  border-radius: 999px;
-  background: #ff4d4d;
-  backdrop-filter: blur(6px);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fff;
-  box-shadow: 0 0 12px rgba(255, 77, 77, 0.45);
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-
-.go-live:hover {
-  background: #ff6666;
-  transform: scale(1.03);
-}
-
-.live-badge {
-  position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.65rem;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fff;
-  pointer-events: none;
-}
-
-.live-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: #ff4d4d;
-  box-shadow: 0 0 8px rgba(255, 77, 77, 0.8);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
 }
 </style>
