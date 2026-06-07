@@ -1,10 +1,10 @@
 <script setup>
-import LiveStream from './components/LiveStream.vue'
+import LiveStream from "./components/LiveStream.vue";
 
 const defaultStreamUrl =
-  'https://gui-cam-converter.happysea-d9d1b28f.australiaeast.azurecontainerapps.io/cam/index.m3u8'
+  "https://gui-cam-converter.yellowdune-f4db7c23.ukwest.azurecontainerapps.io/cam/index.m3u8";
 
-const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl
+const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl;
 </script>
 
 <template>
@@ -24,8 +24,8 @@ const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl
 
     <footer class="footer">
       <p>
-        Crested geckos are nocturnal tree dwellers from New Caledonia. GUI may be
-        napping, climbing, or hunting crickets when you tune in.
+        Crested geckos are nocturnal tree dwellers from New Caledonia. GUI may
+        be napping, climbing, or hunting crickets when you tune in.
       </p>
     </footer>
   </div>
@@ -39,7 +39,11 @@ const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl
   align-items: center;
   padding: 2.5rem 1.25rem 2rem;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(74, 124, 89, 0.35), transparent),
+    radial-gradient(
+      ellipse 80% 50% at 50% -10%,
+      rgba(74, 124, 89, 0.35),
+      transparent
+    ),
     radial-gradient(circle at 100% 100%, rgba(45, 74, 52, 0.25), transparent),
     #0f1410;
 }
