@@ -8,6 +8,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  ptzEnabled: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const videoRef = ref(null)
@@ -324,6 +328,7 @@ onBeforeUnmount(destroyPlayer)
         :is-at-live-edge="isAtLiveEdge"
         :is-buffering="isBuffering"
         :zoom="zoom"
+        :ptz-enabled="ptzEnabled"
         @go-live="goLive"
         @zoom-in="zoomIn"
         @zoom-out="zoomOut"

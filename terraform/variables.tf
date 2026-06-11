@@ -73,9 +73,16 @@ variable "mtx_hls_address" {
 }
 
 variable "mtx_paths_cam_source" {
-  description = "RTSP URL for the camera (contains credentials — set via terraform.tfvars, never commit)."
+  description = "RTSP URL for the primary camera path /cam (contains credentials — set via terraform.tfvars, never commit)."
   type        = string
   sensitive   = true
+}
+
+variable "mtx_paths_cam2_source" {
+  description = "RTSP URL for the secondary camera path /cam2 (optional; omit or set null to disable)."
+  type        = string
+  sensitive   = true
+  default     = null
 }
 
 variable "mtx_hls_variant" {
@@ -130,4 +137,49 @@ variable "deploy_onvif_api" {
   description = "Zip and deploy the pre-published API package to App Service on terraform apply."
   type        = bool
   default     = true
+}
+
+variable "web_storage_account_name" {
+  description = "Globally unique name for the static web storage account (3–24 lowercase letters and numbers)."
+  type        = string
+  default     = "guicam"
+}
+
+variable "web_dist_dir" {
+  description = "Path to the built Vue app, relative to terraform/. Populated by the web deploy step."
+  type        = string
+  default     = ".deploy/web-dist"
+}
+
+variable "deploy_web" {
+  description = "Build the Vue app and upload it to Azure Storage static website on terraform apply."
+  type        = bool
+  default     = true
+}
+
+variable "vite_hls_low_latency" {
+  description = "VITE_HLS_LOW_LATENCY value baked into the web build."
+  type        = string
+  default     = "true"
+}
+
+variable "vite_onvif_uri" {
+  description = "VITE_ONVIF_URI for PTZ controls (optional)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "vite_onvif_user" {
+  description = "VITE_ONVIF_USER for PTZ controls (optional; embedded in the built site)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "vite_onvif_password" {
+  description = "VITE_ONVIF_PASSWORD for PTZ controls (optional; embedded in the built site)."
+  type        = string
+  sensitive   = true
+  default     = null
 }

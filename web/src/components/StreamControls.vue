@@ -23,6 +23,10 @@ const props = defineProps({
     type: Number,
     default: 1,
   },
+  ptzEnabled: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['go-live', 'zoom-in', 'zoom-out', 'zoom-reset'])
@@ -249,6 +253,7 @@ defineExpose({ revealControls })
       <PtzControls
         class="controls-ptz"
         :zoom="zoom"
+        :ptz-enabled="ptzEnabled"
         @open-change="ptzOpen = $event"
         @moving-change="ptzMoving = $event"
         @zoom-in="emit('zoom-in')"

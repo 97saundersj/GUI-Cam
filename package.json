@@ -2,6 +2,7 @@
   "name": "gui-cam",
   "private": true,
   "scripts": {
-    "build:api": "dotnet publish api/OnvifApi/OnvifApi.csproj -c Release -o terraform/.deploy/onvif-api"
+    "build:api": "dotnet publish api/OnvifApi/OnvifApi.csproj -c Release -o terraform/.deploy/onvif-api",
+    "build:web": "npm ci --prefix web && npm run build --prefix web"
   }
 }

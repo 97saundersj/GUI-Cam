@@ -1,10 +1,23 @@
 <script setup>
 import LiveStream from "./components/LiveStream.vue";
 
-const defaultStreamUrl =
-  "https://gui-cam-converter.yellowdune-f4db7c23.ukwest.azurecontainerapps.io/cam/index.m3u8";
+const converterBase =
+  "https://gui-cam-converter.yellowdune-f4db7c23.ukwest.azurecontainerapps.io";
 
-const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl;
+const cameras = [
+  {
+    label: "Camera 1",
+    src: import.meta.env.VITE_STREAM_URL || `${converterBase}/cam/index.m3u8`,
+    ptz: true,
+  },
+  {
+    label: "Camera 2",
+    src:
+      import.meta.env.VITE_STREAM_URL_2 ||
+      `${converterBase}/cam2/index.m3u8`,
+    ptz: false,
+  },
+];
 </script>
 
 <template>
@@ -19,7 +32,16 @@ const streamUrl = import.meta.env.VITE_STREAM_URL || defaultStreamUrl;
     </header>
 
     <main class="main">
-      <LiveStream :src="streamUrl" />
+      <div class="cameras">
+        <section
+          v-for="camera in cameras"
+          :key="camera.label"
+          class="camera"
+        >
+          <h2 class="camera-label">{{ camera.label }}</h2>
+          <LiveStream :src="camera.src" :ptz-enabled="camera.ptz" />
+        </section>
+      </div>
     </main>
 
     <footer class="footer">
@@ -84,6 +106,25 @@ h1 {
 .main {
   width: min(960px, 100%);
   flex: 1;
+}
+
+.cameras {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.camera {
+  min-width: 0;
+}
+
+.camera-label {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7cb88a;
 }
 
 .footer {

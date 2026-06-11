@@ -5,10 +5,14 @@ import { MAX_ZOOM, MIN_ZOOM } from '../composables/useDigitalZoom'
 import { usePtzSpeed } from '../composables/usePtzSpeed'
 import PtzJoystick from './PtzJoystick.vue'
 
-defineProps({
+const props = defineProps({
   zoom: {
     type: Number,
     default: 1,
+  },
+  ptzEnabled: {
+    type: Boolean,
+    default: true,
   },
 })
 
@@ -173,7 +177,7 @@ function onKeyDown(event) {
   }
 
   const vec = keyDirections[event.key]
-  if (vec && !keysHeld.has(event.key)) {
+  if (vec && props.ptzEnabled && !keysHeld.has(event.key)) {
     event.preventDefault()
     keysHeld.add(event.key)
     activeDirection.value = event.key
@@ -213,7 +217,7 @@ onBeforeUnmount(() => {
         @keyup="onKeyUp"
       >
         <div class="ptz-popover-body">
-          <div class="ptz-section">
+          <div v-if="ptzEnabled" class="ptz-section">
             <span class="ptz-section-label">Camera</span>
 
             <template v-if="configured">
@@ -325,7 +329,7 @@ onBeforeUnmount(() => {
       :class="{ 'ptz-toggle--active': open }"
       :aria-expanded="open"
       aria-controls="ptz-controls"
-      aria-label="Pan and tilt controls"
+      aria-label="PTZ controls"
       @click.stop="toggle"
     >
       PTZ

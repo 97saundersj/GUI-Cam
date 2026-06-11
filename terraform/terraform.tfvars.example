@@ -4,8 +4,9 @@
 location            = "ukwest"
 resource_group_name = "rg-gui-cam"
 
-# RTSP URL for your camera (same as MTX_PATHS_CAM_SOURCE in repo root .env)
-mtx_paths_cam_source = "rtsp://username:password@host:port/stream1"
+# RTSP URLs (same as MTX_PATHS_CAM*_SOURCE in repo root .env)
+mtx_paths_cam_source  = "rtsp://username:password@host:port/stream1"
+# mtx_paths_cam2_source = "rtsp://username:password@host:port/stream1"
 
 # Optional overrides (defaults match .env.example)
 # mtx_hls_variant            = "lowLatency"
@@ -18,3 +19,11 @@ mtx_paths_cam_source = "rtsp://username:password@host:port/stream1"
 #   npm run build:api
 # onvif_api_service_plan_sku = "F1"   # free tier; use "B1" for always-on
 # deploy_onvif_api           = true   # set false for infra only
+
+# Web UI (Azure Storage static website — built and uploaded on terraform apply)
+# web_storage_account_name = "guicam"   # must be globally unique
+# deploy_web               = true
+# vite_hls_low_latency     = "true"
+# vite_onvif_uri           = "http://192.168.0.79:2020/onvif/service"
+# vite_onvif_user          = "your-camera-account"
+# vite_onvif_password      = "your-password"

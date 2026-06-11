@@ -33,6 +33,14 @@ resource "azurerm_container_app" "converter" {
     value = var.mtx_paths_cam_source
   }
 
+  dynamic "secret" {
+    for_each = var.mtx_paths_cam2_source != null ? [1] : []
+    content {
+      name  = "rtsp-source-cam2"
+      value = var.mtx_paths_cam2_source
+    }
+  }
+
   template {
     min_replicas = var.converter_min_replicas
     max_replicas = var.converter_max_replicas
@@ -51,6 +59,14 @@ resource "azurerm_container_app" "converter" {
       env {
         name        = "MTX_PATHS_CAM_SOURCE"
         secret_name = "rtsp-source"
+      }
+
+      dynamic "env" {
+        for_each = var.mtx_paths_cam2_source != null ? [1] : []
+        content {
+          name        = "MTX_PATHS_CAM2_SOURCE"
+          secret_name = "rtsp-source-cam2"
+        }
       }
 
       env {
