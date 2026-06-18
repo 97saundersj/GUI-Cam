@@ -4,13 +4,17 @@ import {
   dayBounds,
   findRecordingAtTime,
   formatDuration,
+  formatTimelineTime,
   formatTimelineTimeRange,
   isSameRecording,
   recordingSegmentStyle,
   recordingTypeLabel,
   timeFromTimelinePosition,
   timelineHourTicks,
+  timelineRangeWindow,
 } from '../api/tapo.js'
+
+const ZOOM_WINDOW_SECONDS = 3600
 
 const props = defineProps({
   recordings: {
@@ -39,8 +43,15 @@ const props = defineProps({
 const emit = defineEmits(['select'])
 
 const trackRef = ref(null)
+const zoomTrackRef = ref(null)
+const tooltipRef = ref(null)
+const timelineRef = ref(null)
 const hoverRecording = ref(null)
 const hoverPosition = ref(null)
+const scrubUnixSeconds = ref(null)
+const zoomCenterUnixSeconds = ref(null)
+const zoomAnchorLeftPct = ref(null)
+const isZoomLocked = ref(false)
 const gapHint = ref(false)
 const isScrubbing = ref(false)
 
@@ -51,11 +62,37 @@ const isCompact = computed(() => props.variant === 'compact')
 
 const dayRange = computed(() => dayBounds(props.date))
 const dayStart = computed(() => dayRange.value.dayStart)
-const dayDuration = computed(() => dayRange.value.dayEnd - dayRange.value.dayStart)
+const dayEnd = computed(() => dayRange.value.dayEnd)
+const dayDuration = computed(() => dayEnd.value - dayStart.value)
 
 const hourTicks = computed(() =>
   timelineHourTicks(dayStart.value, dayDuration.value, isCompact.value ? 5 : 7),
 )
+
+const zoomWindow = computed(() => {
+  const center = zoomCenterUnixSeconds.value ?? dayStart.value + dayDuration.value / 2
+  return timelineRangeWindow(center, ZOOM_WINDOW_SECONDS, dayStart.value, dayEnd.value)
+})
+
+const mainZoomRegionStyle = computed(() => {
+  if (zoomCenterUnixSeconds.value == null) {
+    return null
+  }
+
+  const leftPct = ((zoomWindow.value.start - dayStart.value) / dayDuration.value) * 100
+  const widthPct = (zoomWindow.value.duration / dayDuration.value) * 100
+  return { leftPct, widthPct }
+})
+
+const zoomTicks = computed(() => timelineHourTicks(zoomWindow.value.start, zoomWindow.value.duration, 5))
+
+const zoomPlayheadLeftPct = computed(() => {
+  if (scrubUnixSeconds.value == null) {
+    return 0
+  }
+
+  return ((scrubUnixSeconds.value - zoomWindow.value.start) / zoomWindow.value.duration) * 100
+})
 
 const segments = computed(() =>
   props.recordings.map((recording, index) => ({
@@ -65,25 +102,50 @@ const segments = computed(() =>
     style: recordingSegmentStyle(recording, dayStart.value, dayDuration.value),
     selected: isSameRecording(recording, props.selectedRecording),
     hovered: hoverRecording.value != null && isSameRecording(recording, hoverRecording.value),
-    typeClass:
-      recording.vedioType === 1
-        ? 'timeline-segment--continuous'
-        : recording.vedioType === 2
-          ? 'timeline-segment--detection'
-          : 'timeline-segment--unknown',
+    typeClass: segmentTypeClass(recording),
   })),
 )
 
+const zoomSegments = computed(() =>
+  props.recordings
+    .filter(
+      (recording) =>
+        recording.endTime > zoomWindow.value.start && recording.startTime < zoomWindow.value.end,
+    )
+    .map((recording, index) => ({
+      recording,
+      index,
+      key: `zoom-${recording.startTime}-${recording.endTime}-${index}`,
+      style: recordingSegmentStyle(recording, zoomWindow.value.start, zoomWindow.value.duration),
+      hovered: hoverRecording.value != null && isSameRecording(recording, hoverRecording.value),
+      typeClass: segmentTypeClass(recording),
+    })),
+)
+
 const tooltipRecording = computed(() => hoverRecording.value)
-const tooltipStyle = computed(() => {
-  if (hoverPosition.value == null) {
+
+const zoomTooltipStyle = computed(() => {
+  if (zoomAnchorLeftPct.value == null) {
     return {}
   }
 
+  const leftPct = Math.max(10, Math.min(90, zoomAnchorLeftPct.value))
   return {
-    left: `${hoverPosition.value.leftPct}%`,
+    left: `${leftPct}%`,
   }
 })
+
+function segmentTypeClass(recording) {
+  if (recording.vedioType === 1) {
+    return 'timeline-segment--continuous'
+  }
+
+  if (recording.vedioType === 2) {
+    return 'timeline-segment--detection'
+  }
+
+  return 'timeline-segment--unknown'
+}
 
 function segmentLabel(recording) {
   const range = formatTimelineTimeRange(recording.startTime, recording.endTime)
@@ -96,61 +158,227 @@ function selectRecording(recording) {
   emit('select', recording)
 }
 
-function positionFromEvent(event) {
-  const track = trackRef.value
-  if (!track) {
+function positionFromClientX(clientX, trackEl, rangeStart, rangeDuration) {
+  if (!trackEl) {
     return null
   }
 
-  const rect = track.getBoundingClientRect()
+  const rect = trackEl.getBoundingClientRect()
   if (rect.width <= 0) {
     return null
   }
 
-  const ratio = (event.clientX - rect.left) / rect.width
-  const leftPct = Math.max(0, Math.min(100, ratio * 100))
-  const unixSeconds = timeFromTimelinePosition(ratio, dayStart.value, dayDuration.value)
-  return { ratio, leftPct, unixSeconds }
+  const ratio = (clientX - rect.left) / rect.width
+  const clampedRatio = Math.max(0, Math.min(1, ratio))
+  const leftPct = clampedRatio * 100
+  const unixSeconds = timeFromTimelinePosition(clampedRatio, rangeStart, rangeDuration)
+  return { ratio: clampedRatio, leftPct, unixSeconds }
+}
+
+function updateScrubTimeOnly(unixSeconds) {
+  const clamped = Math.max(dayStart.value, Math.min(dayEnd.value - 1, unixSeconds))
+  scrubUnixSeconds.value = clamped
+  const recording = findRecordingAtTime(props.recordings, clamped)
+  hoverRecording.value = recording
+  gapHint.value = !recording
+  return { unixSeconds: clamped, recording }
+}
+
+function updateFromMainTrack(unixSeconds, leftPct) {
+  const clamped = Math.max(dayStart.value, Math.min(dayEnd.value - 1, unixSeconds))
+  const anchorPct = Math.max(0, Math.min(100, leftPct))
+
+  zoomCenterUnixSeconds.value = clamped
+  zoomAnchorLeftPct.value = anchorPct
+  scrubUnixSeconds.value = clamped
+  hoverPosition.value = { leftPct: anchorPct }
+  const recording = findRecordingAtTime(props.recordings, clamped)
+  hoverRecording.value = recording
+  gapHint.value = !recording
+  return { unixSeconds: clamped, leftPct: anchorPct, recording }
+}
+
+function lockZoomArea() {
+  if (zoomCenterUnixSeconds.value == null && scrubUnixSeconds.value != null) {
+    zoomCenterUnixSeconds.value = scrubUnixSeconds.value
+  }
+
+  if (zoomAnchorLeftPct.value == null && hoverPosition.value) {
+    zoomAnchorLeftPct.value = hoverPosition.value.leftPct
+  }
+
+  isZoomLocked.value = true
+}
+
+function unlockZoomArea() {
+  isZoomLocked.value = false
+}
+
+function positionFromMainTrack(event) {
+  return positionFromClientX(event.clientX, trackRef.value, dayStart.value, dayDuration.value)
+}
+
+function positionFromZoomTrack(event) {
+  return positionFromClientX(
+    event.clientX,
+    zoomTrackRef.value,
+    zoomWindow.value.start,
+    zoomWindow.value.duration,
+  )
+}
+
+function getScrubTooltipHitRect() {
+  const tooltip = tooltipRef.value
+  const track = trackRef.value
+  if (!tooltip) {
+    return null
+  }
+
+  const rect = tooltip.getBoundingClientRect()
+  const bridgeBottom = track?.getBoundingClientRect().top ?? rect.bottom
+
+  return {
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    bottom: Math.max(rect.bottom, bridgeBottom),
+  }
+}
+
+function isPointerOverScrubTooltip(event) {
+  const rect = getScrubTooltipHitRect()
+  if (!rect) {
+    return false
+  }
+
+  return (
+    event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom
+  )
+}
+
+function isPointerOverMainTrack(event) {
+  const track = trackRef.value
+  if (!track) {
+    return false
+  }
+
+  const rect = track.getBoundingClientRect()
+  return (
+    event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom
+  )
+}
+
+function shouldUseZoomMapping(event) {
+  return zoomCenterUnixSeconds.value != null && isPointerOverScrubTooltip(event)
+}
+
+function updateScrubFromEvent(event) {
+  if (shouldUseZoomMapping(event)) {
+    if (!isZoomLocked.value) {
+      lockZoomArea()
+    }
+
+    const position = positionFromZoomTrack(event)
+    if (!position) {
+      return null
+    }
+
+    return updateScrubTimeOnly(position.unixSeconds)
+  }
+
+  if (isPointerOverMainTrack(event)) {
+    if (isZoomLocked.value) {
+      unlockZoomArea()
+    }
+
+    const position = positionFromMainTrack(event)
+    if (!position) {
+      return null
+    }
+
+    return updateFromMainTrack(position.unixSeconds, position.leftPct)
+  }
+
+  return null
 }
 
 function updateHoverFromPosition(event) {
-  const position = positionFromEvent(event)
+  const position = positionFromMainTrack(event)
   if (!position) {
     return null
   }
 
-  hoverPosition.value = { leftPct: position.leftPct }
-  const recording = findRecordingAtTime(props.recordings, position.unixSeconds)
-  hoverRecording.value = recording
-  gapHint.value = !recording
-  return { position, recording }
+  return updateFromMainTrack(position.unixSeconds, position.leftPct)
 }
 
 function clearHover() {
   hoverRecording.value = null
   hoverPosition.value = null
+  scrubUnixSeconds.value = null
+  zoomCenterUnixSeconds.value = null
+  zoomAnchorLeftPct.value = null
+  isZoomLocked.value = false
   gapHint.value = false
 }
 
-function onTrackPointerDown(event) {
+function onTimelinePointerDown(event) {
   if (event.button !== 0) {
+    return
+  }
+
+  const onMainTrack = isPointerOverMainTrack(event)
+  const onZoomTooltip = isPointerOverScrubTooltip(event)
+  if (!onMainTrack && !onZoomTooltip) {
     return
   }
 
   isScrubbing.value = true
   scrubPointerId = event.pointerId
-  trackRef.value?.setPointerCapture(event.pointerId)
+  timelineRef.value?.setPointerCapture(event.pointerId)
   event.preventDefault()
-  updateHoverFromPosition(event)
+
+  if (onZoomTooltip) {
+    lockZoomArea()
+  } else {
+    unlockZoomArea()
+  }
+
+  updateScrubFromEvent(event)
 }
 
-function onTrackPointerMove(event) {
+function onTimelinePointerMove(event) {
   if (isScrubbing.value && event.pointerId === scrubPointerId) {
-    updateHoverFromPosition(event)
+    updateScrubFromEvent(event)
     return
   }
 
   if (event.pointerType === 'touch') {
+    return
+  }
+
+  if (isPointerOverScrubTooltip(event)) {
+    if (!isZoomLocked.value) {
+      lockZoomArea()
+    }
+
+    const position = positionFromZoomTrack(event)
+    if (position) {
+      updateScrubTimeOnly(position.unixSeconds)
+    }
+    return
+  }
+
+  if (isZoomLocked.value) {
+    unlockZoomArea()
+  }
+
+  if (!isPointerOverMainTrack(event)) {
     return
   }
 
@@ -166,12 +394,16 @@ function onSegmentPointerEnter(event, recording) {
     return
   }
 
+  if (isZoomLocked.value) {
+    unlockZoomArea()
+  }
+
   hoverRecording.value = recording
   gapHint.value = false
 
-  const position = positionFromEvent(event)
+  const position = positionFromMainTrack(event)
   if (position) {
-    hoverPosition.value = { leftPct: position.leftPct }
+    updateFromMainTrack(position.unixSeconds, position.leftPct)
   }
 }
 
@@ -184,13 +416,26 @@ function onSegmentPointerLeave(event) {
     return
   }
 
-  if (!event.relatedTarget?.closest?.('.timeline-track')) {
-    clearHover()
+  if (
+    event.relatedTarget?.closest?.('.timeline-track')
+    || event.relatedTarget?.closest?.('.timeline-scrub-tooltip')
+  ) {
+    return
   }
+
+  clearHover()
 }
 
-function onTrackPointerLeave() {
+function onTimelinePointerLeave(event) {
   if (isScrubbing.value) {
+    return
+  }
+
+  if (event.relatedTarget?.closest?.('.recording-timeline')) {
+    return
+  }
+
+  if (isPointerOverScrubTooltip(event)) {
     return
   }
 
@@ -202,9 +447,9 @@ function endScrub(event) {
     return
   }
 
-  trackRef.value?.releasePointerCapture(event.pointerId)
+  timelineRef.value?.releasePointerCapture(event.pointerId)
 
-  const result = updateHoverFromPosition(event)
+  const result = updateScrubFromEvent(event)
   if (result?.recording) {
     selectRecording(result.recording)
     suppressNextClick = true
@@ -218,11 +463,11 @@ function endScrub(event) {
   }
 }
 
-function onTrackPointerUp(event) {
+function onTimelinePointerUp(event) {
   endScrub(event)
 }
 
-function onTrackPointerCancel(event) {
+function onTimelinePointerCancel(event) {
   endScrub(event)
 }
 
@@ -232,7 +477,7 @@ function onTrackClick(event) {
     return
   }
 
-  const position = positionFromEvent(event)
+  const position = positionFromMainTrack(event)
   if (!position) {
     return
   }
@@ -263,6 +508,7 @@ function onSegmentKeydown(event, recording) {
 
 <template>
   <div
+    ref="timelineRef"
     class="recording-timeline"
     :class="{
       'recording-timeline--compact': isCompact,
@@ -270,17 +516,17 @@ function onSegmentKeydown(event, recording) {
       'recording-timeline--loading': loading,
       'recording-timeline--scrubbing': isScrubbing,
     }"
+    @pointerdown="onTimelinePointerDown"
+    @pointermove="onTimelinePointerMove"
+    @pointerup="onTimelinePointerUp"
+    @pointercancel="onTimelinePointerCancel"
+    @pointerleave="onTimelinePointerLeave"
   >
     <div
       ref="trackRef"
       class="timeline-track"
       role="presentation"
       @click="onTrackClick"
-      @pointerdown="onTrackPointerDown"
-      @pointermove="onTrackPointerMove"
-      @pointerup="onTrackPointerUp"
-      @pointercancel="onTrackPointerCancel"
-      @pointerleave="onTrackPointerLeave"
     >
       <div
         v-for="segment in segments"
@@ -308,6 +554,16 @@ function onSegmentKeydown(event, recording) {
       />
 
       <div
+        v-if="mainZoomRegionStyle"
+        class="timeline-zoom-region"
+        :style="{
+          left: `${mainZoomRegionStyle.leftPct}%`,
+          width: `${mainZoomRegionStyle.widthPct}%`,
+        }"
+        aria-hidden="true"
+      />
+
+      <div
         v-if="selectedRecording"
         class="timeline-selection-marker"
         :style="{
@@ -330,28 +586,55 @@ function onSegmentKeydown(event, recording) {
     </div>
 
     <div
-      v-if="tooltipRecording && hoverPosition"
-      class="timeline-tooltip"
-      :style="tooltipStyle"
+      v-if="zoomCenterUnixSeconds != null"
+      ref="tooltipRef"
+      class="timeline-scrub-tooltip"
+      :class="{ 'timeline-scrub-tooltip--locked': isZoomLocked }"
+      :style="zoomTooltipStyle"
       role="tooltip"
+      aria-label="Zoomed timeline"
     >
-      <span class="timeline-tooltip-range">
-        {{ formatTimelineTimeRange(tooltipRecording.startTime, tooltipRecording.endTime) }}
-      </span>
-      <span class="timeline-tooltip-meta">
-        {{ recordingTypeLabel(tooltipRecording.vedioType) }}
-        ·
-        {{ formatDuration(tooltipRecording.durationSeconds) }}
-      </span>
-    </div>
+      <p class="timeline-scrub-time">{{ formatTimelineTime(scrubUnixSeconds) }}</p>
 
-    <p
-      v-else-if="gapHint && hoverPosition && (!isCompact || isScrubbing)"
-      class="timeline-gap-hint"
-      :style="tooltipStyle"
-    >
-      No recording
-    </p>
+      <div ref="zoomTrackRef" class="timeline-zoom-track" aria-hidden="true">
+        <div
+          v-for="segment in zoomSegments"
+          :key="segment.key"
+          class="timeline-segment timeline-zoom-segment"
+          :class="[segment.typeClass, { 'timeline-segment--hovered': segment.hovered }]"
+          :style="{
+            left: `${segment.style.leftPct}%`,
+            width: `${segment.style.widthPct}%`,
+          }"
+        />
+
+        <div class="timeline-zoom-playhead" :style="{ left: `${zoomPlayheadLeftPct}%` }" />
+      </div>
+
+      <div class="timeline-zoom-hours" aria-hidden="true">
+        <span
+          v-for="tick in zoomTicks"
+          :key="tick.time"
+          class="timeline-zoom-hour"
+          :style="{ left: `${tick.leftPct}%` }"
+        >
+          {{ tick.label }}
+        </span>
+      </div>
+
+      <div v-if="tooltipRecording" class="timeline-scrub-recording">
+        <span class="timeline-tooltip-range">
+          {{ formatTimelineTimeRange(tooltipRecording.startTime, tooltipRecording.endTime) }}
+        </span>
+        <span class="timeline-tooltip-meta">
+          {{ recordingTypeLabel(tooltipRecording.vedioType) }}
+          ·
+          {{ formatDuration(tooltipRecording.durationSeconds) }}
+        </span>
+      </div>
+
+      <p v-else class="timeline-scrub-empty">No recording</p>
+    </div>
   </div>
 </template>
 
@@ -384,7 +667,8 @@ function onSegmentKeydown(event, recording) {
   touch-action: none;
 }
 
-.recording-timeline--scrubbing .timeline-track {
+.recording-timeline--scrubbing .timeline-track,
+.recording-timeline--scrubbing .timeline-scrub-tooltip {
   cursor: grabbing;
 }
 
@@ -449,6 +733,17 @@ function onSegmentKeydown(event, recording) {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
+.timeline-zoom-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: rgba(200, 230, 192, 0.12);
+  border-left: 1px solid rgba(200, 230, 192, 0.35);
+  border-right: 1px solid rgba(200, 230, 192, 0.35);
+  z-index: 1;
+}
+
 .timeline-hours {
   position: relative;
   height: 1.1rem;
@@ -463,25 +758,103 @@ function onSegmentKeydown(event, recording) {
   white-space: nowrap;
 }
 
-.timeline-tooltip,
-.timeline-gap-hint {
+.timeline-scrub-tooltip {
   position: absolute;
   bottom: calc(100% + 0.45rem);
   transform: translateX(-50%);
+  pointer-events: auto;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: min(92vw, 22rem);
+  padding: 0.55rem 0.6rem 0.6rem;
+  border-radius: 0.55rem;
+  background: rgba(15, 20, 16, 0.98);
+  border: 1px solid rgba(124, 184, 138, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+  touch-action: none;
+}
+
+.timeline-scrub-tooltip--locked {
+  border-color: rgba(200, 230, 192, 0.55);
+}
+
+.timeline-scrub-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 0.55rem;
+}
+
+.timeline-scrub-time {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e8f0e6;
+  text-align: center;
+}
+
+.timeline-zoom-track {
+  position: relative;
+  height: 2.5rem;
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(124, 184, 138, 0.2);
+  overflow: hidden;
+  cursor: grab;
+}
+
+.recording-timeline--scrubbing .timeline-zoom-track {
+  cursor: grabbing;
+}
+
+.timeline-zoom-segment {
+  pointer-events: none;
+}
+
+.timeline-zoom-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #e8f0e6;
+  box-shadow: 0 0 6px rgba(232, 240, 230, 0.85);
   pointer-events: none;
   z-index: 3;
 }
 
-.timeline-tooltip {
+.timeline-zoom-hours {
+  position: relative;
+  height: 0.95rem;
+}
+
+.timeline-zoom-hour {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  color: #8a9d86;
+  white-space: nowrap;
+}
+
+.timeline-scrub-recording {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.35rem 0.45rem;
-  border-radius: 0.45rem;
-  background: rgba(15, 20, 16, 0.96);
-  border: 1px solid rgba(124, 184, 138, 0.35);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-  white-space: nowrap;
+  gap: 0.15rem;
+  padding-top: 0.1rem;
+  border-top: 1px solid rgba(124, 184, 138, 0.15);
+}
+
+.timeline-scrub-empty {
+  margin: 0;
+  padding-top: 0.15rem;
+  border-top: 1px solid rgba(124, 184, 138, 0.15);
+  font-size: 0.68rem;
+  color: #8a9d86;
+  text-align: center;
 }
 
 .timeline-tooltip-range {
@@ -492,14 +865,5 @@ function onSegmentKeydown(event, recording) {
 .timeline-tooltip-meta {
   font-size: 0.65rem;
   color: #a8b8a4;
-}
-
-.timeline-gap-hint {
-  margin: 0;
-  padding: 0.2rem 0.4rem;
-  border-radius: 0.3rem;
-  background: rgba(15, 20, 16, 0.9);
-  font-size: 0.65rem;
-  color: #8a9d86;
 }
 </style>

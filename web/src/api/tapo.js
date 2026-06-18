@@ -224,6 +224,43 @@ export function formatTimelineHour(unixSeconds) {
   })
 }
 
+export function formatTimelineTime(unixSeconds) {
+  if (unixSeconds == null) {
+    return '—'
+  }
+
+  return new Date(unixSeconds * 1000).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+export function timelineRangeWindow(center, spanSeconds, rangeStart, rangeEnd) {
+  const half = spanSeconds / 2
+  let start = center - half
+  let end = center + half
+
+  if (start < rangeStart) {
+    end += rangeStart - start
+    start = rangeStart
+  }
+
+  if (end > rangeEnd) {
+    start -= end - rangeEnd
+    end = rangeEnd
+  }
+
+  start = Math.max(rangeStart, start)
+  end = Math.min(rangeEnd, end)
+
+  return {
+    start,
+    end,
+    duration: Math.max(end - start, 1),
+  }
+}
+
 export function formatTimelineTimeRange(startTime, endTime) {
   if (startTime == null || endTime == null) {
     return '—'
