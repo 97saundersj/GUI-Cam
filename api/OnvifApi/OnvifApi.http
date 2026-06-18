@@ -10,6 +10,18 @@ Content-Type: application/json
   "password": "password"
 }
 
+### Tapo recordings (password in server config)
+GET {{host}}/api/tapo/recordings?host=192.168.0.79&date=20260618
+
+### Tapo recording playback (MPEG-TS, default)
+GET {{host}}/api/tapo/playback?host=192.168.0.79&startTime=1718697600&endTime=1718698200&format=ts
+
+### Tapo recording playback (MP4 fallback)
+GET {{host}}/api/tapo/playback?host=192.168.0.79&startTime=1718697600&endTime=1718698200&format=mp4
+
+### Tapo playback warmup
+GET {{host}}/api/tapo/playback/warmup?host=192.168.0.79
+
 ### PTZ
 POST {{host}}/api/onvif/ptz
 Content-Type: application/json

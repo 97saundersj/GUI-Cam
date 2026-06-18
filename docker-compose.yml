@@ -1,6 +1,25 @@
 services:
+
   converter:
+
     build: .
+
     env_file: .env
+
     ports:
+
       - "8888:8888"
+
+
+
+  pytapo:
+
+    build: ./pytapo
+
+    env_file: .env
+
+    ports:
+
+      - "5246:8000"
+
+

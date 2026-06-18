@@ -14,16 +14,18 @@ mtx_paths_cam_source  = "rtsp://username:password@host:port/stream1"
 # mtx_hls_part_duration      = "200ms"
 # mtx_hls_always_remux       = "yes"
 
-# ONVIF API (Linux App Service, .NET 8)
-# Publish before apply (from the repo root):
-#   npm run build:api
-# onvif_api_service_plan_sku = "F1"   # free tier; use "B1" for always-on
+# ONVIF API (Linux App Service, .NET 8 — published and deployed on terraform apply)
 # deploy_onvif_api           = true   # set false for infra only
+# onvif_api_service_plan_sku = "F1"   # free tier; use "B1" for always-on
+# tapo_service_base_url      = "http://your-public-ip:5246"  # PyTapo (docker compose; forward port 5246)
+# tapo_password_cloud        = "your-tapo-cloud-password"    # same as TAPO_PASSWORD_CLOUD in .env
 
 # Web UI (Azure Storage static website — built and uploaded on terraform apply)
 # web_storage_account_name = "guicam"   # must be globally unique
 # deploy_web               = true
 # vite_hls_low_latency     = "true"
 # vite_onvif_uri           = "http://192.168.0.79:2020/onvif/service"
+# vite_onvif_uri_2         = "http://192.168.0.80:2020/onvif/service"
+# vite_tapo_host_2         = "192.168.0.80"
 # vite_onvif_user          = "your-camera-account"
 # vite_onvif_password      = "your-password"

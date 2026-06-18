@@ -24,19 +24,26 @@ resource "azurerm_linux_web_app" "onvif_api" {
   }
 
   app_settings = {
-    ASPNETCORE_ENVIRONMENT = "Production"
+    ASPNETCORE_ENVIRONMENT     = "Production"
+    TapoService__BaseUrl       = local.tapo_service_base_url
+    TapoService__PasswordCloud = var.tapo_password_cloud
   }
+
+  depends_on = [azurerm_container_app.pytapo]
 }
 
 locals {
   onvif_api_publish_path = "${path.module}/${var.onvif_api_publish_dir}"
-  onvif_api_publish_files = try(
-    sort(fileset(local.onvif_api_publish_path, "**")),
-    []
+
+  onvif_api_source_files = concat(
+    tolist(fileset("${path.module}/../api/OnvifApi", "**/*.cs")),
+    tolist(fileset("${path.module}/../api/OnvifApi", "**/*.csproj")),
+    tolist(fileset("${path.module}/../api/OnvifApi", "**/*.json")),
   )
-  onvif_api_publish_hash = length(local.onvif_api_publish_files) > 0 ? sha256(join("", [
-    for f in local.onvif_api_publish_files : filesha256("${local.onvif_api_publish_path}/${f}")
-  ])) : "not-published"
+
+  onvif_api_source_hash = sha256(join("", [
+    for f in local.onvif_api_source_files : filesha256("${path.module}/../api/OnvifApi/${f}")
+  ]))
 }
 
 resource "null_resource" "onvif_api_deploy" {
@@ -45,7 +52,7 @@ resource "null_resource" "onvif_api_deploy" {
   depends_on = [azurerm_linux_web_app.onvif_api]
 
   triggers = {
-    publish_output = local.onvif_api_publish_hash
+    source_hash = local.onvif_api_source_hash
   }
 
   provisioner "local-exec" {
@@ -54,10 +61,10 @@ resource "null_resource" "onvif_api_deploy" {
     command     = <<-EOT
       $ErrorActionPreference = 'Stop'
       $publishDir = '${replace(var.onvif_api_publish_dir, "/", "\\")}'
-      $entryDll = Join-Path $publishDir 'OnvifApi.dll'
-      if (-not (Test-Path $entryDll)) {
-        throw "Publish the API first: dotnet publish ..\api\OnvifApi\OnvifApi.csproj -c Release -o $publishDir"
-      }
+      if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
+      New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+      dotnet publish ..\api\OnvifApi\OnvifApi.csproj -c Release -o $publishDir
+      if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
       $zipPath = '.deploy\onvif-api.zip'
       if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
       tar -caf $zipPath -C $publishDir .

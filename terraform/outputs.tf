@@ -33,6 +33,21 @@ output "onvif_api_app_name" {
   value       = azurerm_linux_web_app.onvif_api.name
 }
 
+output "pytapo_app_name" {
+  description = "Name of the PyTapo Container App."
+  value       = azurerm_container_app.pytapo.name
+}
+
+output "pytapo_fqdn" {
+  description = "Public FQDN of the PyTapo HTTP service."
+  value       = azurerm_container_app.pytapo.ingress[0].fqdn
+}
+
+output "tapo_service_url" {
+  description = "Base URL wired into the ONVIF API (TapoService__BaseUrl)."
+  value       = local.tapo_service_base_url
+}
+
 output "onvif_api_url" {
   description = "Base URL for the ONVIF API (set as VITE_ONVIF_API_URL in GitHub Actions)."
   value       = "https://${azurerm_linux_web_app.onvif_api.default_hostname}"

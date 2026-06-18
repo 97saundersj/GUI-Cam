@@ -19,6 +19,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  isLiveMode: {
+    type: Boolean,
+    default: true,
+  },
   zoom: {
     type: Number,
     default: 1,
@@ -26,6 +30,10 @@ const props = defineProps({
   ptzEnabled: {
     type: Boolean,
     default: true,
+  },
+  togglePlay: {
+    type: Function,
+    default: null,
   },
 })
 
@@ -90,6 +98,12 @@ function updateTimeline() {
 }
 
 function togglePlay() {
+  if (props.togglePlay) {
+    props.togglePlay()
+    revealControls()
+    return
+  }
+
   const video = props.videoEl
   if (!video) return
 
@@ -237,12 +251,12 @@ defineExpose({ revealControls })
       <div class="controls-spacer" />
 
       <button
-        v-if="!isAtLiveEdge"
+        v-if="!isLiveMode || !isAtLiveEdge"
         type="button"
         class="go-live-btn"
         @click="onGoLiveClick"
       >
-        Go live
+        {{ isLiveMode ? 'Go live' : 'Back to live' }}
       </button>
 
       <div v-else class="live-badge" aria-label="Live">

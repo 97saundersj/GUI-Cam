@@ -1,6 +1,7 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Hls from 'hls.js'
+import mpegts from 'mpegts.js'
 import StreamControls from './StreamControls.vue'
 import { useDigitalZoom } from '../composables/useDigitalZoom'
 const props = defineProps({
@@ -8,11 +9,24 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  mode: {
+    type: String,
+    default: 'live',
+    validator: (value) => value === 'live' || value === 'recording',
+  },
   ptzEnabled: {
     type: Boolean,
     default: true,
   },
 })
+
+const emit = defineEmits(['go-live'])
+
+const isLiveMode = computed(() => props.mode === 'live')
+
+const isMp4Recording = computed(
+  () => !isLiveMode.value && props.src.includes('format=mp4'),
+)
 
 const videoRef = ref(null)
 const streamFrameRef = ref(null)
@@ -22,12 +36,68 @@ const errorMessage = ref('')
 const isAtLiveEdge = ref(true)
 const isBuffering = ref(false)
 
+const isPlaying = computed(() => status.value === 'live' || status.value === 'playing')
+
 const lowLatency = import.meta.env.VITE_HLS_LOW_LATENCY !== 'false'
 const LIVE_EDGE_THRESHOLD_SEC = lowLatency ? 3 : 8
 const SEEK_TO_LIVE_EPSILON_SEC = 0.05
 
 let hls = null
+let mpegtsPlayer = null
+let playerGeneration = 0
 let initialLiveSyncDone = false
+
+function destroyMpegtsPlayer() {
+  if (!mpegtsPlayer) return
+
+  const player = mpegtsPlayer
+  mpegtsPlayer = null
+
+  const video = videoRef.value
+  if (video) {
+    video.pause()
+  }
+
+  try {
+    player.pause()
+  } catch {
+    // Player may already be paused or torn down.
+  }
+
+  try {
+    player.unload()
+  } catch {
+    // Ignore unload errors during teardown.
+  }
+
+  try {
+    player.detachMediaElement()
+  } catch {
+    // detachMediaElement can reject if play() is still pending.
+  }
+
+  try {
+    player.destroy()
+  } catch {
+    // Ignore destroy errors during teardown.
+  }
+}
+
+function destroyPlayer() {
+  if (hls) {
+    hls.destroy()
+    hls = null
+  }
+
+  destroyMpegtsPlayer()
+
+  const video = videoRef.value
+  if (video) {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  }
+}
 
 const {
   zoom,
@@ -65,14 +135,140 @@ function createHlsConfig() {
   }
 }
 
-function destroyPlayer() {
-  if (hls) {
-    hls.destroy()
-    hls = null
+function toggleRecordingPlay() {
+  if (isMp4Recording.value) {
+    const video = videoRef.value
+    if (!video) return
+
+    if (video.paused) {
+      video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+    return
+  }
+
+  if (!mpegtsPlayer) {
+    setupRecordingPlayer()
+    return
+  }
+
+  const video = videoRef.value
+  if (!video) return
+
+  if (video.paused) {
+    mpegtsPlayer.play()
+    status.value = 'connecting'
+  } else {
+    mpegtsPlayer.pause()
   }
 }
 
-function setupPlayer() {
+function startRecordingPlayback(generation = playerGeneration) {
+  if (!mpegtsPlayer || generation !== playerGeneration) return
+
+  const video = videoRef.value
+  if (!video) return
+
+  try {
+    mpegtsPlayer.play()
+  } catch {
+    if (generation === playerGeneration) {
+      status.value = 'paused'
+    }
+    return
+  }
+
+  window.setTimeout(() => {
+    if (generation !== playerGeneration) return
+
+    if (!isLiveMode.value && video.paused && status.value === 'connecting') {
+      status.value = 'paused'
+    }
+  }, 250)
+}
+
+function setupNativeRecordingPlayer() {
+  const video = videoRef.value
+  if (!video || !props.src) return
+
+  const generation = ++playerGeneration
+
+  destroyPlayer()
+  status.value = 'connecting'
+  errorMessage.value = ''
+  isBuffering.value = false
+  isAtLiveEdge.value = true
+  resetZoom()
+
+  video.src = props.src
+  video.load()
+
+  video.play().catch(() => {
+    if (generation === playerGeneration) {
+      status.value = 'paused'
+    }
+  })
+}
+
+function setupRecordingPlayer() {
+  const video = videoRef.value
+  if (!video || !props.src) return
+
+  const generation = ++playerGeneration
+
+  destroyPlayer()
+  status.value = 'connecting'
+  errorMessage.value = ''
+  isBuffering.value = false
+  isAtLiveEdge.value = true
+  resetZoom()
+
+  if (!mpegts.isSupported()) {
+    status.value = 'error'
+    errorMessage.value = 'This browser does not support MPEG-TS playback.'
+    return
+  }
+
+  mpegtsPlayer = mpegts.createPlayer(
+    {
+      type: 'mpegts',
+      isLive: false,
+      url: props.src,
+    },
+    {
+      enableWorker: true,
+      enableStashBuffer: true,
+      stashInitialSize: 512 * 1024,
+    },
+  )
+
+  mpegtsPlayer.attachMediaElement(video)
+  mpegtsPlayer.on(mpegts.Events.ERROR, () => {
+    if (generation !== playerGeneration) return
+
+    status.value = 'error'
+    errorMessage.value = 'Unable to play this recording right now.'
+
+    try {
+      mpegtsPlayer?.pause()
+      mpegtsPlayer?.unload()
+    } catch {
+      // Ignore cleanup errors after a playback failure.
+    }
+  })
+  mpegtsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+    if (generation !== playerGeneration) return
+
+    if (!isLiveMode.value && status.value === 'playing') {
+      status.value = 'paused'
+    }
+  })
+  mpegtsPlayer.load()
+  startRecordingPlayback(generation)
+}
+
+function setupHlsPlayer() {
   const video = videoRef.value
   if (!video || !props.src) return
 
@@ -116,6 +312,16 @@ function setupPlayer() {
   })
 }
 
+function setupPlayer() {
+  if (isLiveMode.value) {
+    setupHlsPlayer()
+  } else if (isMp4Recording.value) {
+    setupNativeRecordingPlayer()
+  } else {
+    setupRecordingPlayer()
+  }
+}
+
 function getSeekableEnd() {
   const video = videoRef.value
   if (!video || video.seekable.length === 0) return null
@@ -130,6 +336,11 @@ function secondsBehindLiveEdge() {
 }
 
 function updateLiveEdgeState() {
+  if (!isLiveMode.value) {
+    isAtLiveEdge.value = false
+    return
+  }
+
   if (!hls) return
 
   const behindLive = secondsBehindLiveEdge()
@@ -145,6 +356,11 @@ function updateLiveEdgeState() {
 }
 
 function goLive() {
+  if (!isLiveMode.value) {
+    emit('go-live')
+    return
+  }
+
   const video = videoRef.value
   if (!video || !hls) return
 
@@ -181,9 +397,15 @@ function onVideoSeeked() {
 }
 
 function onVideoPlaying() {
-  status.value = 'live'
+  status.value = isLiveMode.value ? 'live' : 'playing'
   isBuffering.value = false
   updateLiveEdgeState()
+}
+
+function onVideoPause() {
+  if (!isLiveMode.value && status.value === 'playing') {
+    status.value = 'paused'
+  }
 }
 
 function onVideoCanPlay() {
@@ -191,14 +413,22 @@ function onVideoCanPlay() {
 }
 
 function onVideoWaiting() {
-  if (status.value === 'live') {
+  if (isPlaying.value) {
     isBuffering.value = true
   }
 }
 
 function onVideoError() {
   status.value = 'error'
-  errorMessage.value = 'Stream is offline or unreachable. Check back soon.'
+  errorMessage.value = isLiveMode.value
+    ? 'Stream is offline or unreachable. Check back soon.'
+    : 'Unable to play this recording right now.'
+}
+
+function onRecordingEnded() {
+  if (!isLiveMode.value) {
+    status.value = 'paused'
+  }
 }
 
 function retry() {
@@ -216,17 +446,21 @@ function onStreamClick() {
   if (panDragActive) return
 
   if (status.value === 'paused') {
-    video.play().catch(() => {})
+    if (!isLiveMode.value) {
+      toggleRecordingPlay()
+    } else {
+      video.play().catch(() => {})
+    }
     return
   }
 
-  if (status.value === 'live') {
+  if (isPlaying.value) {
     revealControls()
   }
 }
 
 function onStreamPointerDown(event) {
-  if (status.value !== 'live' || !isZoomed.value) return
+  if (!isPlaying.value || !isZoomed.value) return
   if (event.button !== 0) return
 
   panDragActive = true
@@ -243,7 +477,7 @@ function onStreamPointerUp(event) {
 }
 
 function onStreamWheel(event) {
-  if (status.value !== 'live') return
+  if (!isPlaying.value) return
   event.preventDefault()
   zoomAtWheel(event.deltaY)
   revealControls()
@@ -272,8 +506,13 @@ function onStreamPointerMoveDrag(event) {
 onMounted(setupPlayer)
 
 watch(
-  () => props.src,
-  () => setupPlayer(),
+  () => [props.src, props.mode],
+  (value, previous) => {
+    if (previous && value[0] === previous[0] && value[1] === previous[1]) {
+      return
+    }
+    setupPlayer()
+  },
 )
 
 onBeforeUnmount(destroyPlayer)
@@ -301,34 +540,47 @@ onBeforeUnmount(destroyPlayer)
           muted
           autoplay
           @playing="onVideoPlaying"
+          @pause="onVideoPause"
           @canplay="onVideoCanPlay"
           @waiting="onVideoWaiting"
           @timeupdate="onVideoTimeUpdate"
           @seeked="onVideoSeeked"
           @error="onVideoError"
+          @ended="onRecordingEnded"
         />
       </div>
 
-      <div v-if="status !== 'live'" class="stream-overlay">
-        <span v-if="status === 'connecting'" class="status">Connecting…</span>
+      <div v-if="!isPlaying && status !== 'paused'" class="stream-overlay">
+        <span v-if="status === 'connecting'" class="status">
+          {{ isLiveMode ? 'Connecting…' : 'Loading recording…' }}
+        </span>
         <template v-else-if="status === 'error'">
           <span class="status error">{{ errorMessage }}</span>
           <button type="button" class="retry" @click="retry">Try again</button>
         </template>
-        <span v-else-if="status === 'paused'" class="status">
-          Tap play to start the stream
+      </div>
+
+      <div
+        v-else-if="status === 'paused'"
+        class="stream-overlay stream-overlay--interactive"
+        @click.stop="onStreamClick"
+      >
+        <span class="status">
+          {{ isLiveMode ? 'Tap play to start the stream' : 'Tap play to watch the recording' }}
         </span>
       </div>
 
       <StreamControls
-        v-if="status === 'live'"
+        v-if="isPlaying || status === 'paused'"
         ref="streamControlsRef"
         :video-el="videoRef"
         :frame-el="streamFrameRef"
         :is-at-live-edge="isAtLiveEdge"
         :is-buffering="isBuffering"
+        :is-live-mode="isLiveMode"
         :zoom="zoom"
         :ptz-enabled="ptzEnabled"
+        :toggle-play="isLiveMode ? null : toggleRecordingPlay"
         @go-live="goLive"
         @zoom-in="zoomIn"
         @zoom-out="zoomOut"
@@ -392,6 +644,11 @@ onBeforeUnmount(destroyPlayer)
   padding: 1.5rem;
   background: rgba(10, 13, 11, 0.82);
   text-align: center;
+}
+
+.stream-overlay--interactive {
+  cursor: pointer;
+  z-index: 4;
 }
 
 .status {

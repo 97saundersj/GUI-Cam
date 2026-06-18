@@ -38,6 +38,8 @@ jobs:
           VITE_HLS_LOW_LATENCY: ${{ vars.VITE_HLS_LOW_LATENCY }}
           VITE_ONVIF_API_URL: ${{ vars.VITE_ONVIF_API_URL }}
           VITE_ONVIF_URI: ${{ secrets.VITE_ONVIF_URI }}
+          VITE_ONVIF_URI_2: ${{ secrets.VITE_ONVIF_URI_2 }}
+          VITE_TAPO_HOST_2: ${{ secrets.VITE_TAPO_HOST_2 }}
           VITE_ONVIF_USER: ${{ secrets.VITE_ONVIF_USER }}
           VITE_ONVIF_PASSWORD: ${{ secrets.VITE_ONVIF_PASSWORD }}
         run: npm run build

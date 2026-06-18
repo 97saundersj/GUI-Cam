@@ -11,6 +11,9 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 builder.Services.AddSingleton<OnvifClientCache>();
 builder.Services.AddSingleton<OnvifCameraService>();
+builder.Services.Configure<TapoServiceOptions>(
+    builder.Configuration.GetSection(TapoServiceOptions.SectionName));
+builder.Services.AddHttpClient<TapoRecordingsService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -18,7 +21,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "GUI Cam ONVIF API",
         Version = "v1",
-        Description = "Query ONVIF cameras for device information, services, and RTSP stream URIs.",
+        Description = "Query ONVIF cameras for device information, stream URIs, and PTZ. Proxy Tapo SD-card recordings via the PyTapo service.",
     });
 });
 
