@@ -128,7 +128,7 @@ variable "onvif_api_service_plan_sku" {
 }
 
 variable "onvif_api_publish_dir" {
-  description = "Path to dotnet publish output, relative to terraform/. Publish before apply."
+  description = "Scratch path for dotnet publish output during terraform apply, relative to terraform/."
   type        = string
   default     = ".deploy/onvif-api"
 }
@@ -139,10 +139,52 @@ variable "deploy_onvif_api" {
   default     = true
 }
 
-variable "tapo_service_base_url" {
-  description = "Base URL of the PyTapo HTTP service (TapoService__BaseUrl on the ONVIF API App Service)."
+variable "container_registry_name" {
+  description = "Globally unique name for the Azure Container Registry hosting custom images (alphanumeric only)."
   type        = string
-  default     = "http://localhost:5246"
+  default     = "guicamregistry"
+}
+
+variable "pytapo_app_name" {
+  description = "Name of the PyTapo SD-card recordings Container App."
+  type        = string
+  default     = "gui-cam-pytapo"
+}
+
+variable "deploy_pytapo" {
+  description = "Build the pytapo image in ACR and deploy it as a Container App on terraform apply."
+  type        = bool
+  default     = true
+}
+
+variable "pytapo_cpu" {
+  description = "vCPU cores allocated to the pytapo container."
+  type        = number
+  default     = 1.0
+}
+
+variable "pytapo_memory" {
+  description = "Memory allocated to the pytapo container (ffmpeg playback needs headroom)."
+  type        = string
+  default     = "2Gi"
+}
+
+variable "pytapo_min_replicas" {
+  description = "Minimum number of pytapo replicas (1 keeps recordings responsive)."
+  type        = number
+  default     = 1
+}
+
+variable "pytapo_max_replicas" {
+  description = "Maximum number of pytapo replicas."
+  type        = number
+  default     = 1
+}
+
+variable "tapo_service_base_url" {
+  description = "Optional override for TapoService__BaseUrl. Leave null to use the deployed pytapo Container App."
+  type        = string
+  default     = null
 }
 
 variable "tapo_password_cloud" {

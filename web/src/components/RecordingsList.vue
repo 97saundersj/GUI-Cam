@@ -7,6 +7,7 @@ import {
   toTapoDate,
 } from '../api/tapo.js'
 import RecordingTimeline from './RecordingTimeline.vue'
+import RecordingsDatePicker from './RecordingsDatePicker.vue'
 
 const props = defineProps({
   label: {
@@ -51,7 +52,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'update:date'])
 
 const expanded = ref(false)
 
@@ -86,42 +87,56 @@ function onRefresh() {
 
 <template>
   <section class="recordings">
-    <button
-      type="button"
-      class="recordings-toggle"
-      :aria-expanded="expanded"
-      @click="toggle"
-    >
-      <span
-        class="toggle-chevron"
-        :class="{ 'toggle-chevron--open': expanded }"
-        aria-hidden="true"
+    <div class="recordings-header">
+      <button
+        type="button"
+        class="recordings-toggle"
+        :aria-expanded="expanded"
+        @click="toggle"
       >
-        ▶
-      </span>
-
-      <span class="toggle-text">
-        <span class="recordings-title">{{ title }}</span>
-        <span class="recordings-subtitle">
-          SD card timeline for the selected day
+        <span
+          class="toggle-chevron"
+          :class="{ 'toggle-chevron--open': expanded }"
+          aria-hidden="true"
+        >
+          ▶
         </span>
-      </span>
 
-      <span class="recordings-summary">{{ summary }}</span>
-    </button>
+        <span class="toggle-text">
+          <span class="recordings-title">{{ title }}</span>
+          <span class="recordings-subtitle">
+            SD card timeline for the selected day
+          </span>
+        </span>
+      </button>
 
-    <div v-show="expanded" class="recordings-body">
-      <div class="recordings-toolbar">
+      <div class="recordings-meta">
+        <span class="recordings-summary">{{ summary }}</span>
         <button
           type="button"
           class="refresh-btn"
           :disabled="loading"
+          :aria-label="loading ? 'Loading recordings' : 'Refresh recordings'"
           @click="onRefresh"
         >
-          {{ loading ? 'Loading…' : 'Refresh' }}
+          <svg
+            class="refresh-icon"
+            :class="{ 'refresh-icon--spinning': loading }"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a5.99 5.99 0 0 1-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"
+            />
+          </svg>
         </button>
       </div>
+    </div>
 
+    <div v-show="expanded" class="recordings-body">
       <div class="recordings-legend" aria-hidden="true">
         <span class="legend-item legend-item--continuous">Continuous</span>
         <span class="legend-item legend-item--detection">Detection</span>
@@ -132,16 +147,23 @@ function onRefresh() {
         {{ error }}
       </p>
 
-      <p v-else-if="loading && recordings.length === 0" class="recordings-status">
+      <RecordingsDatePicker
+        v-if="!error"
+        class="recordings-date"
+        :model-value="date"
+        @update:model-value="emit('update:date', $event)"
+      />
+
+      <p v-if="!error && loading && recordings.length === 0" class="recordings-status">
         Loading recordings…
       </p>
 
-      <p v-else-if="!loading && recordings.length === 0" class="recordings-status">
+      <p v-else-if="!error && !loading && recordings.length === 0" class="recordings-status">
         No recordings found for {{ responseDate || toTapoDate(date) }}.
       </p>
 
       <RecordingTimeline
-        v-else
+        v-if="!error && recordings.length > 0"
         variant="expanded"
         :recordings="recordings"
         :date="date"
@@ -166,21 +188,42 @@ function onRefresh() {
   overflow: hidden;
 }
 
+.recordings-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  flex-wrap: wrap;
+}
+
 .recordings-toggle {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  width: 100%;
-  padding: 0.85rem 1rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
   transition: background 0.15s ease;
+  border-radius: 0.35rem;
 }
 
-.recordings-toggle:hover {
+.recordings-header:hover .recordings-toggle {
+  background: transparent;
+}
+
+.recordings-header:has(.recordings-toggle:hover) {
   background: rgba(124, 184, 138, 0.08);
+}
+
+.recordings-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .toggle-chevron {
@@ -221,15 +264,13 @@ function onRefresh() {
   color: #a8b8a4;
 }
 
+.recordings-date {
+  margin-bottom: 0.75rem;
+}
+
 .recordings-body {
   padding: 0 1rem 1rem;
   border-top: 1px solid rgba(124, 184, 138, 0.12);
-}
-
-.recordings-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.65rem 0 0.75rem;
 }
 
 .recordings-legend {
@@ -237,6 +278,7 @@ function onRefresh() {
   flex-wrap: wrap;
   gap: 0.65rem;
   margin-bottom: 0.75rem;
+  padding-top: 0.65rem;
 }
 
 .legend-item {
@@ -268,21 +310,38 @@ function onRefresh() {
 }
 
 .refresh-btn {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid rgba(124, 184, 138, 0.45);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid rgba(124, 184, 138, 0.35);
   border-radius: 0.4rem;
-  background: rgba(74, 124, 89, 0.25);
-  color: #c8e6c0;
-  transition: background 0.15s ease;
+  background: rgba(74, 124, 89, 0.2);
+  color: #a8b8a4;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
   background: rgba(74, 124, 89, 0.4);
+  color: #c8e6c0;
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.refresh-icon--spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .recordings-error {

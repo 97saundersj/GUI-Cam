@@ -37,24 +37,6 @@ const cameras = [
 
     label: 'Camera 1',
 
-    src: import.meta.env.VITE_STREAM_URL || `${converterBase}/cam/index.m3u8`,
-
-    ptz: true,
-
-    tapoHost: resolveTapoHost(
-
-      import.meta.env.VITE_TAPO_HOST,
-
-      import.meta.env.VITE_ONVIF_URI,
-
-    ),
-
-  },
-
-  {
-
-    label: 'Camera 2',
-
     src:
 
       import.meta.env.VITE_STREAM_URL_2 ||
@@ -70,6 +52,28 @@ const cameras = [
       import.meta.env.VITE_ONVIF_URI_2,
 
     ),
+
+    recordings: true,
+
+  },
+
+  {
+
+    label: 'Camera 2',
+
+    src: import.meta.env.VITE_STREAM_URL || `${converterBase}/cam/index.m3u8`,
+
+    ptz: true,
+
+    tapoHost: resolveTapoHost(
+
+      import.meta.env.VITE_TAPO_HOST,
+
+      import.meta.env.VITE_ONVIF_URI,
+
+    ),
+
+    recordings: false,
 
   },
 
@@ -87,29 +91,23 @@ const recordingsCam1 = useTapoRecordings(
 
 )
 
-const recordingsCam2 = useTapoRecordings(
-
-  computed(() => cameras[1].tapoHost),
-
-  selectedDate,
-
-  cameras[1].label,
-
-)
-
 
 
 const recordingsByLabel = {
 
   'Camera 1': recordingsCam1,
 
-  'Camera 2': recordingsCam2,
-
 }
 
 
 
 function cameraStream(camera) {
+
+  if (!camera.recordings) {
+
+    return { src: camera.src, mode: 'live' }
+
+  }
 
   const recording = selectedRecordings.value[camera.label]
 
@@ -166,14 +164,17 @@ const cameraViews = computed(() =>
     return {
       camera,
       stream,
-      recordings: state.recordings.value,
-      responseDate: state.responseDate.value,
-      total: state.total.value,
-      loading: state.loading.value,
-      error: state.error.value,
-      summary: state.summary.value,
-      refresh: state.refresh,
-      selectedRecording: selectedRecordings.value[camera.label] ?? null,
+      showRecordings: camera.recordings,
+      recordings: state?.recordings.value ?? [],
+      responseDate: state?.responseDate.value ?? '',
+      total: state?.total.value ?? 0,
+      loading: state?.loading.value ?? false,
+      error: state?.error.value ?? '',
+      summary: state?.summary.value ?? '',
+      refresh: state?.refresh ?? (() => {}),
+      selectedRecording: camera.recordings
+        ? (selectedRecordings.value[camera.label] ?? null)
+        : null,
       ptzEnabled: camera.ptz && stream.mode === 'live',
     }
   }),
@@ -207,16 +208,6 @@ const cameraViews = computed(() =>
 
     <main class="main">
 
-      <label class="recordings-date">
-
-        <span>Recording date</span>
-
-        <input v-model="selectedDate" class="recordings-date-input" type="date" />
-
-      </label>
-
-
-
       <div class="cameras">
 
         <section
@@ -243,8 +234,9 @@ const cameraViews = computed(() =>
 
           />
           <RecordingsList
+            v-if="view.showRecordings"
+            v-model:date="selectedDate"
             :label="view.camera.label"
-            :date="selectedDate"
             :selected-recording="view.selectedRecording"
             :recordings="view.recordings"
             :response-date="view.responseDate"
@@ -389,46 +381,6 @@ h1 {
   width: min(960px, 100%);
 
   flex: 1;
-
-}
-
-
-
-.recordings-date {
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 0.35rem;
-
-  margin-bottom: 1.25rem;
-
-  font-size: 0.72rem;
-
-  letter-spacing: 0.08em;
-
-  text-transform: uppercase;
-
-  color: #7cb88a;
-
-}
-
-
-
-.recordings-date-input {
-
-  width: fit-content;
-
-  padding: 0.45rem 0.55rem;
-
-  border: 1px solid rgba(124, 184, 138, 0.35);
-
-  border-radius: 0.4rem;
-
-  background: #0f1410;
-
-  color: #e8f0e6;
 
 }
 

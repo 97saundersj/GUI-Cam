@@ -357,7 +357,7 @@ function onSegmentKeydown(event, recording) {
 .timeline-tooltip,
 .timeline-gap-hint {
   position: absolute;
-  top: -2.1rem;
+  bottom: calc(100% + 0.45rem);
   transform: translateX(-50%);
   pointer-events: none;
   z-index: 3;
@@ -366,11 +366,12 @@ function onSegmentKeydown(event, recording) {
 .timeline-tooltip {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 0.35rem;
-  background: rgba(15, 20, 16, 0.95);
+  gap: 0.25rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.45rem;
+  background: rgba(15, 20, 16, 0.96);
   border: 1px solid rgba(124, 184, 138, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   white-space: nowrap;
 }
 

@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vuepic/vue-datepicker": "^14.0.0",
     "hls.js": "^1.6.2",
     "mpegts.js": "^1.8.0",
     "vue": "^3.5.13"
