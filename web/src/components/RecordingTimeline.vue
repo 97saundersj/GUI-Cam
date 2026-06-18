@@ -42,6 +42,10 @@ const trackRef = ref(null)
 const hoverRecording = ref(null)
 const hoverPosition = ref(null)
 const gapHint = ref(false)
+const isScrubbing = ref(false)
+
+let scrubPointerId = null
+let suppressNextClick = false
 
 const isCompact = computed(() => props.variant === 'compact')
 
@@ -60,6 +64,7 @@ const segments = computed(() =>
     key: `${recording.startTime}-${recording.endTime}-${index}`,
     style: recordingSegmentStyle(recording, dayStart.value, dayDuration.value),
     selected: isSameRecording(recording, props.selectedRecording),
+    hovered: hoverRecording.value != null && isSameRecording(recording, hoverRecording.value),
     typeClass:
       recording.vedioType === 1
         ? 'timeline-segment--continuous'
@@ -108,23 +113,59 @@ function positionFromEvent(event) {
   return { ratio, leftPct, unixSeconds }
 }
 
-function onTrackPointerMove(event) {
-  if (event.target.closest('.timeline-segment')) {
-    return
-  }
-
+function updateHoverFromPosition(event) {
   const position = positionFromEvent(event)
   if (!position) {
-    return
+    return null
   }
 
   hoverPosition.value = { leftPct: position.leftPct }
   const recording = findRecordingAtTime(props.recordings, position.unixSeconds)
   hoverRecording.value = recording
   gapHint.value = !recording
+  return { position, recording }
+}
+
+function clearHover() {
+  hoverRecording.value = null
+  hoverPosition.value = null
+  gapHint.value = false
+}
+
+function onTrackPointerDown(event) {
+  if (event.button !== 0) {
+    return
+  }
+
+  isScrubbing.value = true
+  scrubPointerId = event.pointerId
+  trackRef.value?.setPointerCapture(event.pointerId)
+  event.preventDefault()
+  updateHoverFromPosition(event)
+}
+
+function onTrackPointerMove(event) {
+  if (isScrubbing.value && event.pointerId === scrubPointerId) {
+    updateHoverFromPosition(event)
+    return
+  }
+
+  if (event.pointerType === 'touch') {
+    return
+  }
+
+  if (event.target.closest('.timeline-segment')) {
+    return
+  }
+
+  updateHoverFromPosition(event)
 }
 
 function onSegmentPointerEnter(event, recording) {
+  if (isScrubbing.value) {
+    return
+  }
+
   hoverRecording.value = recording
   gapHint.value = false
 
@@ -135,24 +176,62 @@ function onSegmentPointerEnter(event, recording) {
 }
 
 function onSegmentPointerLeave(event) {
+  if (isScrubbing.value) {
+    return
+  }
+
   if (event.relatedTarget?.closest?.('.timeline-segment')) {
     return
   }
 
   if (!event.relatedTarget?.closest?.('.timeline-track')) {
-    hoverRecording.value = null
-    hoverPosition.value = null
-    gapHint.value = false
+    clearHover()
   }
 }
 
 function onTrackPointerLeave() {
-  hoverRecording.value = null
-  hoverPosition.value = null
-  gapHint.value = false
+  if (isScrubbing.value) {
+    return
+  }
+
+  clearHover()
+}
+
+function endScrub(event) {
+  if (!isScrubbing.value || event.pointerId !== scrubPointerId) {
+    return
+  }
+
+  trackRef.value?.releasePointerCapture(event.pointerId)
+
+  const result = updateHoverFromPosition(event)
+  if (result?.recording) {
+    selectRecording(result.recording)
+    suppressNextClick = true
+  }
+
+  isScrubbing.value = false
+  scrubPointerId = null
+
+  if (event.pointerType === 'touch') {
+    clearHover()
+  }
+}
+
+function onTrackPointerUp(event) {
+  endScrub(event)
+}
+
+function onTrackPointerCancel(event) {
+  endScrub(event)
 }
 
 function onTrackClick(event) {
+  if (suppressNextClick) {
+    suppressNextClick = false
+    return
+  }
+
   const position = positionFromEvent(event)
   if (!position) {
     return
@@ -162,6 +241,16 @@ function onTrackClick(event) {
   if (recording) {
     selectRecording(recording)
   }
+}
+
+function onSegmentClick(recording, event) {
+  if (suppressNextClick) {
+    suppressNextClick = false
+    event.stopPropagation()
+    return
+  }
+
+  selectRecording(recording)
 }
 
 function onSegmentKeydown(event, recording) {
@@ -179,6 +268,7 @@ function onSegmentKeydown(event, recording) {
       'recording-timeline--compact': isCompact,
       'recording-timeline--expanded': !isCompact,
       'recording-timeline--loading': loading,
+      'recording-timeline--scrubbing': isScrubbing,
     }"
   >
     <div
@@ -186,14 +276,23 @@ function onSegmentKeydown(event, recording) {
       class="timeline-track"
       role="presentation"
       @click="onTrackClick"
+      @pointerdown="onTrackPointerDown"
       @pointermove="onTrackPointerMove"
+      @pointerup="onTrackPointerUp"
+      @pointercancel="onTrackPointerCancel"
       @pointerleave="onTrackPointerLeave"
     >
       <div
         v-for="segment in segments"
         :key="segment.key"
         class="timeline-segment"
-        :class="[segment.typeClass, { 'timeline-segment--selected': segment.selected }]"
+        :class="[
+          segment.typeClass,
+          {
+            'timeline-segment--selected': segment.selected,
+            'timeline-segment--hovered': segment.hovered,
+          },
+        ]"
         :style="{
           left: `${segment.style.leftPct}%`,
           width: `${segment.style.widthPct}%`,
@@ -202,7 +301,7 @@ function onSegmentKeydown(event, recording) {
         tabindex="0"
         :aria-label="segmentLabel(segment.recording)"
         :aria-pressed="segment.selected"
-        @click.stop="selectRecording(segment.recording)"
+        @click.stop="onSegmentClick(segment.recording, $event)"
         @keydown="onSegmentKeydown($event, segment.recording)"
         @pointerenter="onSegmentPointerEnter($event, segment.recording)"
         @pointerleave="onSegmentPointerLeave"
@@ -246,7 +345,11 @@ function onSegmentKeydown(event, recording) {
       </span>
     </div>
 
-    <p v-else-if="gapHint && hoverPosition && !isCompact" class="timeline-gap-hint" :style="tooltipStyle">
+    <p
+      v-else-if="gapHint && hoverPosition && (!isCompact || isScrubbing)"
+      class="timeline-gap-hint"
+      :style="tooltipStyle"
+    >
       No recording
     </p>
   </div>
@@ -278,6 +381,11 @@ function onSegmentKeydown(event, recording) {
   border: 1px solid rgba(124, 184, 138, 0.15);
   cursor: pointer;
   overflow: hidden;
+  touch-action: none;
+}
+
+.recording-timeline--scrubbing .timeline-track {
+  cursor: grabbing;
 }
 
 .recording-timeline--compact .timeline-track {
@@ -321,7 +429,8 @@ function onSegmentKeydown(event, recording) {
   background: rgba(255, 255, 255, 0.25);
 }
 
-.timeline-segment:hover {
+.timeline-segment:hover,
+.timeline-segment--hovered {
   filter: brightness(1.15);
 }
 
