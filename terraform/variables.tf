@@ -139,6 +139,19 @@ variable "deploy_onvif_api" {
   default     = true
 }
 
+variable "tapo_service_base_url" {
+  description = "Base URL of the PyTapo HTTP service (TapoService__BaseUrl on the ONVIF API App Service)."
+  type        = string
+  default     = "http://localhost:5246"
+}
+
+variable "tapo_password_cloud" {
+  description = "Tapo cloud account password for SD-card access (TapoService__PasswordCloud)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "web_storage_account_name" {
   description = "Globally unique name for the static web storage account (3–24 lowercase letters and numbers)."
   type        = string
@@ -179,6 +192,20 @@ variable "vite_onvif_user" {
 
 variable "vite_onvif_password" {
   description = "VITE_ONVIF_PASSWORD for PTZ controls (optional; embedded in the built site)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "vite_onvif_uri_2" {
+  description = "VITE_ONVIF_URI_2 for camera 2 recordings host (optional)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "vite_tapo_host_2" {
+  description = "VITE_TAPO_HOST_2 override for camera 2 recordings (optional)."
   type        = string
   sensitive   = true
   default     = null

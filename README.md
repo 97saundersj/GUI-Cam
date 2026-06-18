@@ -12,6 +12,7 @@ A live webcam site for **GUI**, a crested gecko. Watch the stream in your browse
 | `api/OnvifApi/`      | C# Web API — ONVIF device info and stream URIs           |
 | `Dockerfile`         | MediaMTX container — converts an RTSP camera feed to HLS |
 | `docker-compose.yml` | Runs the stream converter locally                        |
+| `pytapo/`            | Tapo SD-card recording API (FastAPI / PyTapo, port 5246)   |
 
 ## Local development
 
@@ -69,6 +70,30 @@ docker compose up --build
 
 HLS stream: http://localhost:8888/cam/index.m3u8
 
+## Tapo recordings
+
+SD-card clips are listed via a [PyTapo](https://github.com/JurajNyiri/pytapo) HTTP service in `pytapo/`. The C# API proxies requests to it.
+
+**Local stack:**
+
+```bash
+docker compose up --build    # starts converter (:8888) and pytapo (:5246)
+cd api/OnvifApi && dotnet run
+```
+
+PyTapo health: http://localhost:5246/health
+
+**List recordings** — `GET /api/tapo/recordings?host=<camera-ip>&date=YYYYMMDD` on the ONVIF API (port 5245). `host` is required; `date` defaults to today UTC. Tapo cloud password is read from server config (`TapoService:PasswordCloud`), not sent by the browser.
+
+Configure the cloud password when running `dotnet run`:
+
+```bash
+# PowerShell
+$env:TapoService__PasswordCloud = "your-tapo-cloud-password"
+```
+
+Or set `TapoService__PasswordCloud` in Azure App Service (see `terraform.tfvars.example`). Set `TapoService:BaseUrl` in `appsettings.json` (default `http://localhost:5246`). On Azure use `TapoService__BaseUrl`.
+
 ## ONVIF API
 
 `api/OnvifApi` — .NET 8 Web API for Tapo / ONVIF cameras.
@@ -95,6 +120,8 @@ Both endpoints use the same JSON body for the camera connection:
 **Details** — `POST /api/onvif` — returns device info, services, profiles, stream URIs.
 
 **PTZ** — `POST /api/onvif/ptz` — same body plus `"command": "up"` (`down`, `left`, `right`, `stop`).
+
+**Tapo recordings** — `GET /api/tapo/recordings?host=<camera-ip>&date=YYYYMMDD` — `host` required; `date` optional. Cloud password in `TapoService:PasswordCloud` on the server.
 
 ## Deployment
 

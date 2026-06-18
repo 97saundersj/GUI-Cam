@@ -36,6 +36,8 @@ locals {
     stream2_url     = local.web_hls_stream2_url
     onvif_api_url   = local.web_onvif_api_url
     onvif_uri       = coalesce(var.vite_onvif_uri, "")
+    onvif_uri_2     = coalesce(var.vite_onvif_uri_2, "")
+    tapo_host_2     = coalesce(var.vite_tapo_host_2, "")
     onvif_user      = coalesce(var.vite_onvif_user, "")
     onvif_password  = coalesce(var.vite_onvif_password, "")
     hls_low_latency = var.vite_hls_low_latency
@@ -83,6 +85,8 @@ resource "null_resource" "web_deploy" {
         'VITE_ONVIF_API_URL=${local.web_onvif_api_url}',
         'VITE_HLS_LOW_LATENCY=${var.vite_hls_low_latency}',
         'VITE_ONVIF_URI=${coalesce(var.vite_onvif_uri, "")}',
+        'VITE_ONVIF_URI_2=${coalesce(var.vite_onvif_uri_2, "")}',
+        'VITE_TAPO_HOST_2=${coalesce(var.vite_tapo_host_2, "")}',
         'VITE_ONVIF_USER=${coalesce(var.vite_onvif_user, "")}',
         'VITE_ONVIF_PASSWORD=${coalesce(var.vite_onvif_password, "")}'
       ) | Set-Content $prodEnv -Encoding utf8
@@ -100,6 +104,8 @@ resource "null_resource" "web_deploy" {
         $env:VITE_ONVIF_API_URL = '${local.web_onvif_api_url}'
         $env:VITE_HLS_LOW_LATENCY = '${var.vite_hls_low_latency}'
         $env:VITE_ONVIF_URI = '${coalesce(var.vite_onvif_uri, "")}'
+        $env:VITE_ONVIF_URI_2 = '${coalesce(var.vite_onvif_uri_2, "")}'
+        $env:VITE_TAPO_HOST_2 = '${coalesce(var.vite_tapo_host_2, "")}'
         $env:VITE_ONVIF_USER = '${coalesce(var.vite_onvif_user, "")}'
         $env:VITE_ONVIF_PASSWORD = '${coalesce(var.vite_onvif_password, "")}'
         npx vite build

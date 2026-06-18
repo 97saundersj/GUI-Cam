@@ -1,3 +1,6 @@
+# Downloaded Tapo recordings (local docker output)
+recordings/
+
 # Secrets & local config
 .env
 .env.*

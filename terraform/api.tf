@@ -24,7 +24,9 @@ resource "azurerm_linux_web_app" "onvif_api" {
   }
 
   app_settings = {
-    ASPNETCORE_ENVIRONMENT = "Production"
+    ASPNETCORE_ENVIRONMENT     = "Production"
+    TapoService__BaseUrl       = var.tapo_service_base_url
+    TapoService__PasswordCloud = var.tapo_password_cloud
   }
 }
 
