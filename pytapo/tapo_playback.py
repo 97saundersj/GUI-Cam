@@ -13,6 +13,7 @@ from pytapo.media_stream._utils import StreamType
 
 from tapo_pool import get_playback_device
 from tapo_recordings import TapoError
+from tapo_target import InvalidCameraTarget, parse_camera_target
 
 DEFAULT_STREAM_PORT = 8800
 DEFAULT_WINDOW_SIZE = 200
@@ -112,7 +113,7 @@ async def ensure_media_port_open(
     except Exception as exc:
         raise TapoError(
             f"Cannot reach camera media stream at {host}:{port}. "
-            "Ensure port 8800 is forwarded and use the camera LAN IP on your home network."
+            "Check the playback port (default 8800) and that the playit tunnel is online."
         ) from exc
 
 
@@ -121,13 +122,18 @@ async def prepare_playback(
     password_cloud: str,
     device_label: str | None,
 ) -> tuple[object, str]:
+    try:
+        target = parse_camera_target(host)
+    except InvalidCameraTarget as exc:
+        raise TapoError(str(exc)) from exc
+
     device, client_id = await asyncio.to_thread(
         get_playback_device,
         host,
         password_cloud,
         device_label,
     )
-    await ensure_media_port_open(host)
+    await ensure_media_port_open(target.media_host, target.playback_port)
     return device, client_id
 
 

@@ -21,11 +21,18 @@ locals {
   web_onvif_api_url   = "https://${azurerm_linux_web_app.onvif_api.default_hostname}"
 
   # coalesce() rejects empty strings; optional vars may be null or "" in tfvars.
-  vite_onvif_uri_value      = var.vite_onvif_uri != null ? var.vite_onvif_uri : ""
-  vite_onvif_uri_2_value    = var.vite_onvif_uri_2 != null ? var.vite_onvif_uri_2 : ""
-  vite_tapo_host_2_value    = var.vite_tapo_host_2 != null ? var.vite_tapo_host_2 : ""
-  vite_onvif_user_value     = var.vite_onvif_user != null ? var.vite_onvif_user : ""
-  vite_onvif_password_value = var.vite_onvif_password != null ? var.vite_onvif_password : ""
+  vite_onvif_uri_value            = var.vite_onvif_uri != null ? var.vite_onvif_uri : ""
+  vite_onvif_uri_2_value          = var.vite_onvif_uri_2 != null ? var.vite_onvif_uri_2 : ""
+  vite_tapo_host_value            = var.vite_tapo_host != null ? var.vite_tapo_host : ""
+  vite_tapo_host_2_value          = var.vite_tapo_host_2 != null ? var.vite_tapo_host_2 : ""
+  vite_tapo_api_port_value        = var.vite_tapo_api_port != null ? tostring(var.vite_tapo_api_port) : ""
+  vite_tapo_playback_port_value   = var.vite_tapo_playback_port != null ? tostring(var.vite_tapo_playback_port) : ""
+  vite_tapo_api_port_2_value      = var.vite_tapo_api_port_2 != null ? tostring(var.vite_tapo_api_port_2) : ""
+  vite_tapo_playback_port_2_value = var.vite_tapo_playback_port_2 != null ? tostring(var.vite_tapo_playback_port_2) : ""
+  vite_tapo_playback_host_value   = var.vite_tapo_playback_host != null ? var.vite_tapo_playback_host : ""
+  vite_tapo_playback_host_2_value = var.vite_tapo_playback_host_2 != null ? var.vite_tapo_playback_host_2 : ""
+  vite_onvif_user_value           = var.vite_onvif_user != null ? var.vite_onvif_user : ""
+  vite_onvif_password_value       = var.vite_onvif_password != null ? var.vite_onvif_password : ""
 
   web_source_files = concat(
     tolist(fileset("${path.module}/../web", "index.html")),
@@ -42,12 +49,19 @@ locals {
     stream_url      = local.web_hls_stream_url
     stream2_url     = local.web_hls_stream2_url
     onvif_api_url   = local.web_onvif_api_url
-    onvif_uri       = local.vite_onvif_uri_value
-    onvif_uri_2     = local.vite_onvif_uri_2_value
-    tapo_host_2     = local.vite_tapo_host_2_value
-    onvif_user      = local.vite_onvif_user_value
-    onvif_password  = local.vite_onvif_password_value
-    hls_low_latency = var.vite_hls_low_latency
+    onvif_uri             = local.vite_onvif_uri_value
+    onvif_uri_2           = local.vite_onvif_uri_2_value
+    tapo_host             = local.vite_tapo_host_value
+    tapo_host_2           = local.vite_tapo_host_2_value
+    tapo_api_port         = local.vite_tapo_api_port_value
+    tapo_playback_port    = local.vite_tapo_playback_port_value
+    tapo_api_port_2       = local.vite_tapo_api_port_2_value
+    tapo_playback_port_2  = local.vite_tapo_playback_port_2_value
+    tapo_playback_host    = local.vite_tapo_playback_host_value
+    tapo_playback_host_2  = local.vite_tapo_playback_host_2_value
+    onvif_user            = local.vite_onvif_user_value
+    onvif_password        = local.vite_onvif_password_value
+    hls_low_latency       = var.vite_hls_low_latency
   }))
 }
 
@@ -93,7 +107,14 @@ resource "null_resource" "web_deploy" {
         'VITE_HLS_LOW_LATENCY=${var.vite_hls_low_latency}',
         'VITE_ONVIF_URI=${local.vite_onvif_uri_value}',
         'VITE_ONVIF_URI_2=${local.vite_onvif_uri_2_value}',
+        'VITE_TAPO_HOST=${local.vite_tapo_host_value}',
         'VITE_TAPO_HOST_2=${local.vite_tapo_host_2_value}',
+        'VITE_TAPO_API_PORT=${local.vite_tapo_api_port_value}',
+        'VITE_TAPO_PLAYBACK_PORT=${local.vite_tapo_playback_port_value}',
+        'VITE_TAPO_API_PORT_2=${local.vite_tapo_api_port_2_value}',
+        'VITE_TAPO_PLAYBACK_PORT_2=${local.vite_tapo_playback_port_2_value}',
+        'VITE_TAPO_PLAYBACK_HOST=${local.vite_tapo_playback_host_value}',
+        'VITE_TAPO_PLAYBACK_HOST_2=${local.vite_tapo_playback_host_2_value}',
         'VITE_ONVIF_USER=${local.vite_onvif_user_value}',
         'VITE_ONVIF_PASSWORD=${local.vite_onvif_password_value}'
       ) | Set-Content $prodEnv -Encoding utf8
@@ -112,7 +133,14 @@ resource "null_resource" "web_deploy" {
         $env:VITE_HLS_LOW_LATENCY = '${var.vite_hls_low_latency}'
         $env:VITE_ONVIF_URI = '${local.vite_onvif_uri_value}'
         $env:VITE_ONVIF_URI_2 = '${local.vite_onvif_uri_2_value}'
+        $env:VITE_TAPO_HOST = '${local.vite_tapo_host_value}'
         $env:VITE_TAPO_HOST_2 = '${local.vite_tapo_host_2_value}'
+        $env:VITE_TAPO_API_PORT = '${local.vite_tapo_api_port_value}'
+        $env:VITE_TAPO_PLAYBACK_PORT = '${local.vite_tapo_playback_port_value}'
+        $env:VITE_TAPO_API_PORT_2 = '${local.vite_tapo_api_port_2_value}'
+        $env:VITE_TAPO_PLAYBACK_PORT_2 = '${local.vite_tapo_playback_port_2_value}'
+        $env:VITE_TAPO_PLAYBACK_HOST = '${local.vite_tapo_playback_host_value}'
+        $env:VITE_TAPO_PLAYBACK_HOST_2 = '${local.vite_tapo_playback_host_2_value}'
         $env:VITE_ONVIF_USER = '${local.vite_onvif_user_value}'
         $env:VITE_ONVIF_PASSWORD = '${local.vite_onvif_password_value}'
         npx vite build

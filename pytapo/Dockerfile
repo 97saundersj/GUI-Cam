@@ -9,7 +9,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY tapo_recordings.py tapo_pool.py tapo_playback.py app.py .
+COPY tapo_recordings.py tapo_pool.py tapo_playback.py tapo_target.py app.py .
 
 EXPOSE 8000
 

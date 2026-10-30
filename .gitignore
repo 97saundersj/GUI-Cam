@@ -1,6 +1,10 @@
 # Downloaded Tapo recordings (local docker output)
 recordings/
 
+# Python
+__pycache__/
+*.py[cod]
+
 # Secrets & local config
 .env
 .env.*

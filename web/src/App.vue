@@ -51,6 +51,12 @@ const cameras = [
 
       import.meta.env.VITE_ONVIF_URI_2,
 
+      import.meta.env.VITE_TAPO_API_PORT_2,
+
+      import.meta.env.VITE_TAPO_PLAYBACK_PORT_2,
+
+      import.meta.env.VITE_TAPO_PLAYBACK_HOST_2,
+
     ),
 
     recordings: true,
@@ -70,6 +76,12 @@ const cameras = [
       import.meta.env.VITE_TAPO_HOST,
 
       import.meta.env.VITE_ONVIF_URI,
+
+      import.meta.env.VITE_TAPO_API_PORT,
+
+      import.meta.env.VITE_TAPO_PLAYBACK_PORT,
+
+      import.meta.env.VITE_TAPO_PLAYBACK_HOST,
 
     ),
 

@@ -246,9 +246,52 @@ variable "vite_onvif_uri_2" {
   default     = null
 }
 
-variable "vite_tapo_host_2" {
-  description = "VITE_TAPO_HOST_2 override for camera 2 recordings (optional)."
+variable "vite_tapo_host" {
+  description = "VITE_TAPO_HOST override for camera 1 recordings (optional)."
   type        = string
   sensitive   = true
+  default     = null
+}
+
+variable "vite_tapo_api_port" {
+  description = "Public Tapo HTTPS API port for camera 1 (default 443)."
+  type        = number
+  default     = null
+}
+
+variable "vite_tapo_playback_port" {
+  description = "Public Tapo playback port for camera 1 (default 8800)."
+  type        = number
+  default     = null
+}
+
+variable "vite_tapo_playback_host" {
+  description = "Public Tapo playback host for camera 1 when it differs from the API host (optional). May include :port."
+  type        = string
+  default     = null
+}
+
+variable "vite_tapo_host_2" {
+  description = "VITE_TAPO_HOST_2 override for camera 2 recordings (optional). May be host or host:apiPort:playbackPort."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "vite_tapo_api_port_2" {
+  description = "Public Tapo HTTPS API port for camera 2 (default 443)."
+  type        = number
+  default     = null
+}
+
+variable "vite_tapo_playback_port_2" {
+  description = "Public Tapo playback port for camera 2 (default 8800)."
+  type        = number
+  default     = null
+}
+
+variable "vite_tapo_playback_host_2" {
+  description = "Public Tapo playback host for camera 2 when it differs from the API host (optional). May include :port."
+  type        = string
   default     = null
 }

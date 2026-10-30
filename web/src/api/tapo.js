@@ -18,6 +18,9 @@ function apiUrl(path) {
   return `${apiBase}${path}`
 }
 
+export const DEFAULT_TAPO_API_PORT = 443
+export const DEFAULT_TAPO_PLAYBACK_PORT = 8800
+
 export function hostFromOnvifUri(uri) {
   if (!uri) {
     return null
@@ -30,13 +33,165 @@ export function hostFromOnvifUri(uri) {
   }
 }
 
-export function resolveTapoHost(tapoHost, onvifUri) {
-  const explicit = tapoHost?.trim()
-  if (explicit) {
-    return explicit
+export function parseOptionalPort(value) {
+  if (value == null || String(value).trim() === '') {
+    return null
   }
 
-  return hostFromOnvifUri(onvifUri)
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null
+  }
+
+  return port
+}
+
+function formatHost(host) {
+  return host.includes(':') ? `[${host}]` : host
+}
+
+export function parseTapoEndpoint(raw, overridePort, defaultPort) {
+  const value = (raw ?? '').trim()
+  if (!value) {
+    return null
+  }
+
+  let host = value
+  let port = defaultPort
+
+  if (value.startsWith('[')) {
+    const end = value.indexOf(']')
+    if (end === -1) {
+      return { host: value, port: parseOptionalPort(overridePort) ?? defaultPort }
+    }
+    host = value.slice(1, end)
+    const rest = value.slice(end + 1)
+    if (rest.startsWith(':')) {
+      port = Number(rest.slice(1)) || defaultPort
+    }
+  } else {
+    const split = value.split(':')
+    if (split.length === 2 && /^\d+$/.test(split[1])) {
+      host = split[0]
+      port = Number(split[1])
+    } else if (split.length > 2 && /^\d+$/.test(split[split.length - 1])) {
+      host = split.slice(0, -1).join(':')
+      port = Number(split[split.length - 1])
+    }
+  }
+
+  return {
+    host,
+    port: parseOptionalPort(overridePort) ?? port,
+  }
+}
+
+export function parseTapoTarget(raw) {
+  const value = (raw ?? '').trim()
+  if (!value) {
+    return null
+  }
+
+  if (value.includes('|')) {
+    const [apiRaw, playbackRaw] = value.split('|', 2)
+    const api = parseTapoEndpoint(apiRaw, null, DEFAULT_TAPO_API_PORT)
+    const playback = parseTapoEndpoint(playbackRaw, null, DEFAULT_TAPO_PLAYBACK_PORT)
+    if (!api?.host) {
+      return null
+    }
+    return {
+      host: api.host,
+      apiPort: api.port,
+      playbackHost: playback?.host ?? api.host,
+      playbackPort: playback?.port ?? DEFAULT_TAPO_PLAYBACK_PORT,
+    }
+  }
+
+  let host = value
+  let parts = []
+
+  if (value.startsWith('[')) {
+    const end = value.indexOf(']')
+    if (end === -1) {
+      return {
+        host: value,
+        apiPort: DEFAULT_TAPO_API_PORT,
+        playbackHost: value,
+        playbackPort: DEFAULT_TAPO_PLAYBACK_PORT,
+      }
+    }
+
+    host = value.slice(1, end)
+    const rest = value.slice(end + 1)
+    if (rest.startsWith(':')) {
+      parts = rest.slice(1).split(':')
+    }
+  } else {
+    const split = value.split(':')
+    if (split.length <= 3) {
+      host = split[0]
+      parts = split.slice(1)
+    } else {
+      const extra = []
+      const core = [...split]
+      while (core.length > 1 && extra.length < 2 && /^\d+$/.test(core[core.length - 1])) {
+        extra.unshift(core.pop())
+      }
+      host = core.join(':')
+      parts = extra
+    }
+  }
+
+  const apiPort = parts[0] ? Number(parts[0]) : DEFAULT_TAPO_API_PORT
+  const playbackPort = parts[1] ? Number(parts[1]) : DEFAULT_TAPO_PLAYBACK_PORT
+
+  return {
+    host,
+    apiPort: Number.isInteger(apiPort) ? apiPort : DEFAULT_TAPO_API_PORT,
+    playbackHost: host,
+    playbackPort: Number.isInteger(playbackPort) ? playbackPort : DEFAULT_TAPO_PLAYBACK_PORT,
+  }
+}
+
+export function formatTapoTarget(rawHost, apiPort, playbackPort, playbackHost) {
+  const apiRaw = (rawHost ?? '').trim()
+  if (!apiRaw) {
+    return null
+  }
+
+  const playbackRaw = playbackHost?.trim()
+  if (playbackRaw) {
+    const api = parseTapoEndpoint(apiRaw, apiPort, DEFAULT_TAPO_API_PORT)
+    const playback = parseTapoEndpoint(playbackRaw, playbackPort, DEFAULT_TAPO_PLAYBACK_PORT)
+    if (!api?.host || !playback?.host) {
+      return null
+    }
+    return `${formatHost(api.host)}:${api.port}|${formatHost(playback.host)}:${playback.port}`
+  }
+
+  const parsed = parseTapoTarget(apiRaw)
+  if (!parsed?.host) {
+    return null
+  }
+
+  const api = parseOptionalPort(apiPort) ?? parsed.apiPort
+  const playback = parseOptionalPort(playbackPort) ?? parsed.playbackPort
+  if (api === DEFAULT_TAPO_API_PORT && playback === DEFAULT_TAPO_PLAYBACK_PORT) {
+    return parsed.host
+  }
+
+  const formattedHost = formatHost(parsed.host)
+  if (playback === DEFAULT_TAPO_PLAYBACK_PORT) {
+    return `${formattedHost}:${api}`
+  }
+
+  return `${formattedHost}:${api}:${playback}`
+}
+
+export function resolveTapoHost(tapoHost, onvifUri, apiPort, playbackPort, playbackHost) {
+  const explicit = tapoHost?.trim()
+  const host = explicit || hostFromOnvifUri(onvifUri)
+  return formatTapoTarget(host, apiPort, playbackPort, playbackHost)
 }
 
 export async function fetchRecordings(host, date) {

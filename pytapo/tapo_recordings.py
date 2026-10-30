@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 from pytapo import Tapo
 
+from tapo_target import InvalidCameraTarget, bind_playback_target, parse_camera_target
+
 
 class TapoError(Exception):
     """Raised when Tapo camera communication fails."""
@@ -44,13 +46,21 @@ def connect_devices(host: str, password_cloud: str) -> tuple[Tapo, dict[str, Tap
     user, password, cloud_password = _camera_credentials(password_cloud)
 
     try:
+        target = parse_camera_target(host)
+    except InvalidCameraTarget as exc:
+        raise TapoError(str(exc)) from exc
+
+    try:
         tapo = Tapo(
-            host,
+            target.host,
             user,
             password,
             cloud_password,
             printDebugInformation=False,
+            controlPort=target.api_port,
+            streamPort=target.playback_port,
         )
+        bind_playback_target(tapo, target)
     except Exception as exc:
         raise TapoError(str(exc)) from exc
 
@@ -58,13 +68,18 @@ def connect_devices(host: str, password_cloud: str) -> tuple[Tapo, dict[str, Tap
     try:
         for child in tapo.getChildDevices():
             mac = child["mac"].replace(":", "")
-            children[mac] = Tapo(
-                host,
+            child_device = Tapo(
+                target.host,
                 user,
                 password,
                 cloud_password,
                 childID=child["device_id"],
+                printDebugInformation=False,
+                controlPort=target.api_port,
+                streamPort=target.playback_port,
             )
+            bind_playback_target(child_device, target)
+            children[mac] = child_device
     except Exception:
         pass
 

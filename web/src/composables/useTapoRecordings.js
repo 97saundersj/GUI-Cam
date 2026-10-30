@@ -3,8 +3,8 @@ import { fetchRecordings, toTapoDate, warmPlaybackConnection } from '../api/tapo
 
 function hostEnvHint(label) {
   return label.includes('2')
-    ? 'VITE_TAPO_HOST_2 or VITE_ONVIF_URI_2'
-    : 'VITE_TAPO_HOST or VITE_ONVIF_URI'
+    ? 'VITE_TAPO_HOST_2 or VITE_ONVIF_URI_2 (optional VITE_TAPO_PLAYBACK_HOST_2)'
+    : 'VITE_TAPO_HOST or VITE_ONVIF_URI (optional VITE_TAPO_PLAYBACK_HOST)'
 }
 
 export function useTapoRecordings(host, date, label = '') {
